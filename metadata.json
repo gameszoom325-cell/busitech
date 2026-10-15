@@ -1,0 +1,8 @@
+{
+  "name": "Contract2Action AI",
+  "description": "Understand the Contract. Automate the Action. Track the Outcome. AI-driven contract obligation extraction, deadline monitoring, risk assessment, and human-in-the-loop approval workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <title>Contract2Action AI</title>
+    <meta name="description" content="Understand the Contract. Automate the Action. Track the Outcome. AI-driven contract obligation extraction, deadline monitoring, risk assessment, and human-in-the-loop approval workflows." />
+    <meta property="og:title" content="Contract2Action AI" />
+    <meta property="og:description" content="Understand the Contract. Automate the Action. Track the Outcome. AI-driven contract obligation extraction, deadline monitoring, risk assessment, and human-in-the-loop approval workflows." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,500&display=swap" rel="stylesheet" />
+    <script>
+      (function() {
+        try {
+          var stored = localStorage.getItem('c2a-theme');
+          var theme = stored || 'light'; // Default is LIGHT theme on first visit!
+          var isDark = false;
+          if (theme === 'dark') {
+            isDark = true;
+          } else if (theme === 'system') {
+            isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          } else {
+            isDark = false;
+          }
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body class="antialiased min-h-[100dvh] text-[var(--color-text-main)] bg-[var(--color-bg-page)] selection:bg-[var(--color-primary-light)] selection:text-[var(--color-primary)] overflow-x-hidden">
+    <div id="root" class="min-h-[100dvh] flex flex-col"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
