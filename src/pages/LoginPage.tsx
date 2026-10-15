@@ -23,7 +23,6 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { authService, RateLimitState } from '../services/auth';
-import { triggerGoogleOAuth } from '../services/googleAuth';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -229,10 +228,10 @@ export const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const googleUser = await triggerGoogleOAuth();
-      const signedInUser = await loginWithGoogle(googleUser);
+      // Direct Firebase Authentication Google Sign-In Popup
+      const signedInUser = await loginWithGoogle();
       setIsSuccess(true);
-      showToast(`Signed in successfully as ${signedInUser.email}`, 'success');
+      showToast(`Signed in as ${signedInUser.name} (${signedInUser.email})`, 'success');
 
       setTimeout(() => {
         const fromPath = (location.state as any)?.from?.pathname;
@@ -498,7 +497,7 @@ export const LoginPage: React.FC = () => {
                         />
                       </svg>
                     )}
-                    <span>{isLoading ? 'Opening Google Sign-In...' : 'Continue with Google'}</span>
+                    <span>{isLoading ? 'Connecting to Google...' : 'Login with Google'}</span>
                   </button>
 
                   {/* Divider with "or" */}

@@ -2,6 +2,7 @@ import { User, GuestRegistration, UserRole } from '../types';
 import { isAdminEmail } from '../config/admins';
 import { MOCK_GUESTS, MOCK_ACTIVITY_LOGS } from '../data/mockData';
 import { GoogleOAuthUser } from './googleAuth';
+import { logoutFirebase } from './firebaseAuth';
 
 const AUTH_SESSION_KEY = 'c2a-auth-session';
 const SESSION_EXPIRED_KEY = 'c2a-session-expired-notice';
@@ -165,12 +166,61 @@ export const authService = {
   },
 
   /**
-   * Google Sign-in Flow (supports real Google OAuth 2.0 payload or verified email)
+   * Saves or updates a session for a Firebase authenticated user
+   */
+  saveFirebaseSession(user: User, token?: string): SessionData {
+    const session: SessionData = {
+      user,
+      loginType: 'google',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + GOOGLE_SESSION_TTL_MS,
+      token: token || `fb_tok_${Date.now()}`
+    };
+
+    try {
+      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+      this.resetRateLimit();
+    } catch {
+      // ignore
+    }
+
+    this.broadcastAuthChange({ type: 'LOGIN', user });
+
+    // Log to activity/audit trail
+    MOCK_ACTIVITY_LOGS.unshift({
+      id: `act_${Date.now()}`,
+      timestamp: 'Just now',
+      userName: user.name,
+      userRole: user.role,
+      action: `Firebase Google Sign-in (${user.role}) - UID: ${user.id.substring(0, 8)}...`,
+      target: 'Firebase Auth',
+      hash: Math.random().toString(16).substring(2, 10),
+      category: 'Auth'
+    });
+
+    return session;
+  },
+
+  /**
+   * Google Sign-in Flow (supports Firebase User, real Google OAuth 2.0 payload, or verified email)
    */
   async loginWithGoogle(
-    oauthUserOrEmail: GoogleOAuthUser | string,
+    oauthUserOrEmailOrUser: GoogleOAuthUser | string | User,
     nameInput?: string
   ): Promise<User> {
+    // If it's already a full User object from Firebase Authentication:
+    if (
+      typeof oauthUserOrEmailOrUser === 'object' &&
+      oauthUserOrEmailOrUser !== null &&
+      'role' in oauthUserOrEmailOrUser &&
+      'email' in oauthUserOrEmailOrUser
+    ) {
+      const appUser = oauthUserOrEmailOrUser as User;
+      this.saveFirebaseSession(appUser);
+      return appUser;
+    }
+
+    const oauthUserOrEmail = oauthUserOrEmailOrUser as GoogleOAuthUser | string;
     const isObject = typeof oauthUserOrEmail === 'object' && oauthUserOrEmail !== null;
     const email = (isObject ? oauthUserOrEmail.email : oauthUserOrEmail).trim();
     if (!email || !email.includes('@')) {
@@ -201,6 +251,7 @@ export const authService = {
 
     const user: User = {
       id: isObject && oauthUserOrEmail.sub ? `usr_g_${oauthUserOrEmail.sub}` : `usr_${Date.now()}`,
+      firebaseUid: isObject && oauthUserOrEmail.sub ? oauthUserOrEmail.sub : undefined,
       name: computedName,
       email,
       role,
@@ -356,12 +407,18 @@ export const authService = {
   },
 
   /**
-   * Logs out user, purges session, in-memory caches, and notifies other tabs
+   * Logs out user, purges session, signs out from Firebase, and notifies other tabs
    */
   logout(notifyTabs: boolean = true): void {
     try {
       localStorage.removeItem(AUTH_SESSION_KEY);
       localStorage.removeItem('c2a-auth-user');
+    } catch {
+      // ignore
+    }
+
+    try {
+      logoutFirebase();
     } catch {
       // ignore
     }

@@ -7,6 +7,7 @@ export interface User {
   role: UserRole;
   avatarText?: string;
   picture?: string;
+  firebaseUid?: string;
   department?: string;
   authLevel?: string;
   isOnline?: boolean;

@@ -18,7 +18,10 @@ import {
   LogOut,
   Menu,
   X,
-  Info
+  Info,
+  Copy,
+  Check,
+  User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -37,7 +40,19 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [copiedUid, setCopiedUid] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState('Acme Corp • Prod');
+
+  const copyFirebaseUid = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const uidToCopy = user?.firebaseUid || user?.id;
+    if (uidToCopy) {
+      navigator.clipboard.writeText(uidToCopy);
+      setCopiedUid(true);
+      setTimeout(() => setCopiedUid(false), 2000);
+    }
+  };
 
   const workspaces = [
     'Acme Corp • Prod',
@@ -268,28 +283,98 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
             {showUserMenu && (
               <div
-                className="absolute right-0 mt-2 w-52 sm:w-56 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-[var(--shadow-dropdown)] p-2 z-[var(--z-dropdown)] text-xs animate-in fade-in duration-150"
+                className="absolute right-0 mt-2 w-64 sm:w-72 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-[var(--shadow-dropdown)] p-2.5 z-[var(--z-dropdown)] text-xs animate-in fade-in duration-150"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="px-3 py-2 border-b border-[var(--color-border)]">
-                  <div className="font-bold text-[var(--color-text-main)] truncate">{user?.name || 'Current User'}</div>
-                  <div className="text-[11px] text-[var(--color-text-muted)] truncate">{user?.email || 'user@example.com'}</div>
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--color-primary-light)] text-[var(--color-primary-text)]">
-                      {user?.role || 'Member'}
+                {/* Profile header with photo, name, email */}
+                <div className="p-2.5 rounded-lg bg-[var(--color-bg-card-subtle)] border border-[var(--color-border-subtle)]">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar
+                      name={user?.name || 'Authorized User'}
+                      initials={user?.avatarText}
+                      picture={user?.picture}
+                      size="md"
+                      showStatus
+                      isOnline={user?.isOnline ?? true}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-[var(--color-text-main)] truncate text-xs sm:text-sm">
+                        {user?.name || 'Current User'}
+                      </div>
+                      <div className="text-[11px] text-[var(--color-text-muted)] truncate" title={user?.email}>
+                        {user?.email || 'user@example.com'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Firebase User ID Section */}
+                  <div className="mt-2.5 pt-2 border-t border-[var(--color-border-subtle)]">
+                    <div className="flex items-center justify-between text-[10px] text-[var(--color-text-subtle)] font-medium mb-1">
+                      <span className="flex items-center gap-1 font-semibold text-[var(--color-primary-text)]">
+                        Firebase User ID:
+                      </span>
+                      <button
+                        onClick={copyFirebaseUid}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--color-primary)] hover:underline cursor-pointer"
+                        title="Copy UID"
+                      >
+                        {copiedUid ? (
+                          <>
+                            <Check className="w-3 h-3 text-[var(--color-success)]" />
+                            <span className="text-[var(--color-success)] font-bold">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div
+                      onClick={copyFirebaseUid}
+                      title="Click to copy Firebase UID"
+                      className="font-mono text-[10px] text-[var(--color-text-main)] bg-[var(--color-bg-card)] px-2 py-1 rounded border border-[var(--color-border)] truncate cursor-pointer hover:border-[var(--color-primary-border)] transition-colors select-all"
+                    >
+                      {user?.firebaseUid || user?.id || 'uid_pending'}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--color-primary-light)] text-[var(--color-primary-text)]">
+                        {user?.role || 'Member'}
+                      </span>
+                      <span className="text-[10px] text-[var(--color-text-subtle)] font-mono">
+                        {user?.authLevel || 'Auth Lv 2'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-[var(--color-success)] flex items-center gap-1 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)]" />
+                      Google Verified
                     </span>
-                    <span className="text-[10px] text-[var(--color-text-subtle)] font-mono">{user?.authLevel || 'Auth Lv 2'}</span>
                   </div>
                 </div>
 
-                <div className="py-1">
+                <div className="py-1 mt-1">
+                  <button
+                    onClick={() => {
+                      setShowProfileModal(true);
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors cursor-pointer"
+                  >
+                    <UserIcon className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
+                    <span>View Profile Details</span>
+                  </button>
+
                   {isAdmin && (
                     <button
                       onClick={() => {
                         navigate('/admin');
                         setShowUserMenu(false);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors cursor-pointer"
                     >
                       <ShieldCheck className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
                       <span>Admin Governance</span>
@@ -300,7 +385,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       setIsCommandOpen(true);
                       setShowUserMenu(false);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors cursor-pointer"
                   >
                     <Search className="w-3.5 h-3.5 text-[var(--color-text-muted)] shrink-0" />
                     <span>Command Palette (⌘K)</span>
@@ -310,7 +395,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 <div className="pt-1 border-t border-[var(--color-border)]">
                   <button
                     onClick={handleSignOut}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-danger-text)] hover:bg-[var(--color-danger-bg)] rounded-lg transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-danger-text)] hover:bg-[var(--color-danger-bg)] rounded-lg transition-colors cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5 shrink-0" />
                     <span>Sign Out</span>
@@ -551,6 +636,137 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           <span className="whitespace-nowrap">Approvals</span>
         </NavLink>
       </nav>
+
+      {/* Google Account Profile Modal (Firebase Authentication) */}
+      {showProfileModal && (
+        <div
+          className="fixed inset-0 z-[var(--z-modal)] bg-black/50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setShowProfileModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-[var(--shadow-modal)] p-6 space-y-5 animate-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-light)] text-[var(--color-primary)] flex items-center justify-center font-bold text-xs">
+                  <UserIcon className="w-4 h-4 shrink-0" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--color-text-main)]">Google Account Details</h3>
+                  <p className="text-[10px] text-[var(--color-text-muted)]">Authenticated via Firebase Google Sign-In</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="p-1 rounded-lg text-[var(--color-text-subtle)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Profile Photo & Primary Identification */}
+            <div className="flex items-center gap-4 p-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-card-subtle)]">
+              <Avatar
+                name={user?.name || 'Google User'}
+                initials={user?.avatarText}
+                picture={user?.picture}
+                size="lg"
+                showStatus
+                isOnline={user?.isOnline ?? true}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="font-extrabold text-base text-[var(--color-text-main)] truncate">
+                  {user?.name || 'Google User'}
+                </div>
+                <div className="text-xs text-[var(--color-text-muted)] truncate mt-0.5">
+                  {user?.email || 'N/A'}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary-text)] border border-[var(--color-primary-border)]">
+                    {user?.role || 'Member'}
+                  </span>
+                  <span className="text-[10px] text-[var(--color-success)] flex items-center gap-1 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)]" />
+                    Verified Gmail
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Detail Rows: Name, Email, Firebase UID */}
+            <div className="space-y-2.5 text-xs">
+              <div className="p-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-card)] flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Full Name</span>
+                <span className="font-semibold text-[var(--color-text-main)]">{user?.name}</span>
+              </div>
+
+              <div className="p-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-card)] flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Gmail Address</span>
+                <span className="font-semibold text-[var(--color-text-main)]">{user?.email}</span>
+              </div>
+
+              {/* Firebase User ID with 1-click copy */}
+              <div className="p-3 rounded-xl border border-[var(--color-primary-border)] bg-[var(--color-primary-light)]/20 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-[var(--color-primary-text)]">Firebase User ID</span>
+                  <button
+                    onClick={copyFirebaseUid}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--color-primary)] hover:underline cursor-pointer"
+                  >
+                    {copiedUid ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-[var(--color-success)]" />
+                        <span className="text-[var(--color-success)]">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy UID</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div
+                  onClick={copyFirebaseUid}
+                  className="font-mono text-xs text-[var(--color-text-main)] bg-[var(--color-bg-card)] p-2.5 rounded-lg border border-[var(--color-border)] break-all select-all cursor-pointer hover:border-[var(--color-primary-border)] transition-colors"
+                  title="Click to copy UID"
+                >
+                  {user?.firebaseUid || user?.id || 'uid_pending'}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-card)] flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Authentication System</span>
+                <span className="font-mono text-[11px] text-[var(--color-text-main)]">Firebase Authentication</span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 flex items-center justify-between">
+              <button
+                onClick={() => {
+                  setShowProfileModal(false);
+                  handleSignOut();
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-[var(--color-danger-text)] hover:bg-[var(--color-danger-bg)] border border-transparent hover:border-[var(--color-danger-border)] transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
+
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors shadow-xs cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Command Palette */}
       <CommandPalette isOpen={isCommandOpen} onClose={() => setIsCommandOpen(false)} />

@@ -2,6 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { User } from '../types';
 import { authService, GuestFormData, SessionData } from '../services/auth';
 import { GoogleOAuthUser } from '../services/googleAuth';
+import {
+  loginWithGoogleFirebase,
+  logoutFirebase,
+  subscribeToFirebaseAuth
+} from '../services/firebaseAuth';
 
 interface AuthContextType {
   user: User | null;
@@ -12,7 +17,7 @@ interface AuthContextType {
   authNotice: string | null;
   setAuthNotice: (msg: string | null) => void;
   clearAuthNotice: () => void;
-  loginWithGoogle: (oauthUserOrEmail: GoogleOAuthUser | string, name?: string) => Promise<User>;
+  loginWithGoogle: (oauthUserOrEmail?: GoogleOAuthUser | string | User, name?: string) => Promise<User>;
   loginAsGuest: (data: GuestFormData) => Promise<User>;
   logout: () => void;
   checkSession: () => SessionData | null;
@@ -48,6 +53,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     syncSession();
     setIsLoading(false);
 
+    // Subscribe to Firebase Auth state for automatic session restore across refreshes
+    const unsubscribeFirebase = subscribeToFirebaseAuth((fbAppUser) => {
+      if (fbAppUser) {
+        const activeSession = authService.saveFirebaseSession(fbAppUser);
+        setSession(activeSession);
+        setUser(fbAppUser);
+      } else {
+        const cur = authService.getSession();
+        if (cur && cur.loginType === 'google') {
+          setSession(null);
+          setUser(null);
+        }
+      }
+    });
+
     // Cross-tab synchronization
     const unsubscribe = authService.onAuthChange(event => {
       if (event.type === 'LOGOUT') {
@@ -79,16 +99,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('pageshow', handlePageShow);
 
     return () => {
+      unsubscribeFirebase();
       unsubscribe();
       window.removeEventListener('c2a:unauthorized', handleUnauthorized);
       window.removeEventListener('pageshow', handlePageShow);
     };
   }, [syncSession]);
 
-  const loginWithGoogle = async (oauthUserOrEmail: GoogleOAuthUser | string, name?: string): Promise<User> => {
+  const loginWithGoogle = async (
+    oauthUserOrEmail?: GoogleOAuthUser | string | User,
+    name?: string
+  ): Promise<User> => {
     setIsLoading(true);
     try {
-      const loggedInUser = await authService.loginWithGoogle(oauthUserOrEmail, name);
+      let loggedInUser: User;
+      if (oauthUserOrEmail) {
+        loggedInUser = await authService.loginWithGoogle(oauthUserOrEmail, name);
+      } else {
+        // Real Firebase Authentication with Google Sign-In Popup
+        const result = await loginWithGoogleFirebase();
+        const idToken = await result.credential.user.getIdToken();
+        authService.saveFirebaseSession(result.user, idToken);
+        loggedInUser = result.user;
+      }
       const currentSession = authService.getSession();
       setSession(currentSession);
       setUser(loggedInUser);
@@ -113,7 +146,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await logoutFirebase();
+    } catch {
+      // ignore
+    }
     authService.logout(true);
     setSession(null);
     setUser(null);
