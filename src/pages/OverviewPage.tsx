@@ -22,7 +22,7 @@ export const OverviewPage: React.FC = () => {
   const navigate = useNavigate();
   const [filterViewActive, setFilterViewActive] = useState(false);
 
-  const firstName = user?.name ? user.name.split(' ')[0] : 'Sarah';
+  const firstName = user?.name ? user.name.split(' ')[0] : 'Ayush';
 
   const handleExportCSV = () => {
     showToast('Exporting Recent Contracts CSV...', 'info');
@@ -64,7 +64,7 @@ export const OverviewPage: React.FC = () => {
           </div>
           {/* Heading */}
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[var(--color-text-main)] tracking-tight truncate">
-            Good morning, {firstName}
+            Hello, {firstName}
           </h1>
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5 break-words">
             Here's what needs your attention across your contracts and obligations.

@@ -28,6 +28,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { Avatar } from '../common/Avatar';
 import { CommandPalette } from '../common/CommandPalette';
 import { MOCK_NOTIFICATIONS } from '../../data/mockData';
+import { NotificationItem } from '../../types';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAdmin, isGuest, logout } = useAuth();
@@ -37,12 +38,26 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState('Acme Corp • Prod');
+
+  const unreadCount = notifications.filter(n => n.unread).length;
+
+  const handleMarkAllRead = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+  };
+
+  const handleNotificationClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, unread: false } : n)));
+  };
 
   const copyFirebaseUid = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -108,7 +123,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[var(--color-bg-page)] text-[var(--color-text-main)]">
+    <div className="min-h-[100dvh] flex flex-col bg-[var(--color-bg-page)] text-[var(--color-text-main)] w-full max-w-full overflow-x-hidden">
       {/* Guest Mode Banner */}
       {isGuest && (
         <div className="bg-[var(--color-warning-bg)] border-b border-[var(--color-warning-border)] text-[var(--color-warning-text)] px-3 py-1.5 text-xs flex items-center justify-between gap-2 shrink-0">
@@ -183,11 +198,13 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           <div className="relative shrink-0">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] transition-colors shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              className="relative p-2 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] transition-colors shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
               aria-label="Notifications"
             >
               <Bell className="w-4 h-4 shrink-0" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-danger)] ring-2 ring-[var(--color-bg-header)]" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-danger)] ring-2 ring-[var(--color-bg-header)] animate-pulse" />
+              )}
             </button>
 
             {showNotifications && (
@@ -196,22 +213,62 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 onClick={e => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border)] font-semibold text-[var(--color-text-main)]">
-                  <span>Notifications</span>
-                  <span className="text-[10px] text-[var(--color-primary-text)] cursor-pointer">Mark all read</span>
-                </div>
-                <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                  {MOCK_NOTIFICATIONS.map(n => (
-                    <div
-                      key={n.id}
-                      className="p-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors cursor-pointer border border-transparent hover:border-[var(--color-border)]"
+                  <div className="flex items-center gap-1.5">
+                    <span>Notifications</span>
+                    {unreadCount > 0 ? (
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary-text)] font-mono">
+                        {unreadCount} new
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-[var(--color-text-subtle)] font-normal">
+                        (0 unread)
+                      </span>
+                    )}
+                  </div>
+                  {unreadCount > 0 ? (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-[10px] text-[var(--color-primary-text)] hover:underline font-semibold cursor-pointer"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-medium text-[var(--color-text-main)] line-clamp-2">{n.title}</span>
-                        {n.unread && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] shrink-0 mt-1" />}
-                      </div>
-                      <span className="text-[10px] text-[var(--color-text-subtle)] mt-1 block">{n.time}</span>
+                      Mark all read
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-[var(--color-text-subtle)]">
+                      All read
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="py-4 text-center text-[var(--color-text-subtle)] text-[11px]">
+                      No notifications
                     </div>
-                  ))}
+                  ) : (
+                    notifications.map(n => (
+                      <div
+                        key={n.id}
+                        onClick={(e) => handleNotificationClick(n.id, e)}
+                        className={`p-2 rounded-lg transition-colors cursor-pointer border ${
+                          n.unread
+                            ? 'bg-[var(--color-bg-card-subtle)] border-[var(--color-border)] hover:bg-[var(--color-bg-hover)]'
+                            : 'border-transparent hover:border-[var(--color-border)] hover:bg-[var(--color-bg-hover)] opacity-75'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={`font-medium text-[var(--color-text-main)] line-clamp-2 ${n.unread ? 'font-semibold' : ''}`}>
+                            {n.title}
+                          </span>
+                          {n.unread && (
+                            <span
+                              className="w-2 h-2 rounded-full bg-[var(--color-primary)] shrink-0 mt-1"
+                              title="Unread notification"
+                            />
+                          )}
+                        </div>
+                        <span className="text-[10px] text-[var(--color-text-subtle)] mt-1 block font-medium">{n.time}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -571,7 +628,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         )}
 
         {/* MAIN VIEWPORT: Padded for bottom navigation and action bars */}
-        <main className="flex-1 min-w-0 overflow-y-auto pb-24 md:pb-8">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-24 md:pb-8 w-full">
           <div className="max-w-[1600px] mx-auto w-full">
             {children}
           </div>

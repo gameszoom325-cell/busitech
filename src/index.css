@@ -129,7 +129,7 @@
   }
 }
 
-html, body {
+html {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--color-bg-page);
   color: var(--color-text-main);
@@ -137,7 +137,58 @@ html, body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Fluid root scaling calibrated for 80% to 120% zoom and scale stability */
+  font-size: clamp(14px, 0.925rem + 0.2vw, 16px);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  position: relative;
+  overscroll-behavior-x: none;
+}
+
+#root {
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Flexbox and Grid boundaries preservation under 80%-120% zoom */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+.grid, .flex {
+  min-width: 0;
+}
+
+.grid > *, .flex > * {
+  min-width: 0;
+}
+
+/* Horizontal scrollbar prevention & smooth container containment */
+.overflow-x-auto {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent unwanted horizontal blowout on tables across zoom levels */
+table {
+  border-collapse: collapse;
+  width: 100%;
 }
 
 /* Fluid page container query */
