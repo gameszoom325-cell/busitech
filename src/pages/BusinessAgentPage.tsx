@@ -53,22 +53,16 @@ const MODEL_OPTIONS: Array<{
   description: string;
 }> = [
   {
+    id: "deepseek-ai/deepseek-v4.1-flash",
+    label: "DeepSeek V4.1 Flash",
+    badge: "NVIDIA NIM",
+    description: "High-speed reasoning, enterprise contract analysis & obligation triage",
+  },
+  {
     id: "gemini-3.8-flash",
-    label: "Gemini 3.8 Flash",
+    label: "Gemini 3.8 Flash (Fallback)",
     badge: "General & Search",
     description: "Balanced reasoning, workspace tool calling & Google Search grounding",
-  },
-  {
-    id: "gemini-4-argon",
-    label: "Gemini 4 Argon",
-    badge: "Complex Reasoning",
-    description: "Deep multi-clause legal analysis & complex risk modeling",
-  },
-  {
-    id: "gemini-3.1-flash-lite",
-    label: "Gemini 3.1 Flash-Lite",
-    badge: "Fast Triage",
-    description: "Ultra-low latency deadline lookups & quick obligation checks",
   },
 ];
 
@@ -149,7 +143,7 @@ This Agreement shall automatically renew for successive twelve (12) month period
 export const BusinessAgentPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"agent" | "extractor">("agent");
   const [selectedModel, setSelectedModel] =
-    useState<GeminiModelTier>("gemini-3.8-flash");
+    useState<GeminiModelTier>("deepseek-ai/deepseek-v4.1-flash");
   const [selectedPersona, setSelectedPersona] =
     useState<AgentRolePersona>("ops_lead");
   const [useSearchGrounding, setUseSearchGrounding] = useState(false);
@@ -158,9 +152,9 @@ export const BusinessAgentPage: React.FC = () => {
     {
       id: "welcome_msg",
       role: "model",
-      text: "Hello! I am the **Busitech AI Business Agent**. You can switch between **Gemini 4 Argon** (complex legal analysis), **Gemini 3.8 Flash** (general operations & live Google Search grounding), and **Gemini 3.1 Flash-Lite** (fast triage), or customize my role persona above.\n\nSelect a playbook on the right or ask me anything below.",
+      text: "Hello! I am the **Busitech AI Business Agent** powered by **NVIDIA DeepSeek V4.1 Flash** (`deepseek-ai/deepseek-v4.1-flash`). You can customize my role persona above.\n\nSelect an executive playbook on the right or ask me any question about your contracts, obligations, or approvals below.",
       timestamp: "Ready",
-      modelUsed: "gemini-3.8-flash",
+      modelUsed: "deepseek-ai/deepseek-v4.1-flash",
       toolCalls: [],
     },
   ]);
@@ -280,7 +274,7 @@ export const BusinessAgentPage: React.FC = () => {
     } catch (err: any) {
       const errText =
         err?.message ||
-        "Failed to reach Gemini API. Please verify your API key in Settings > Secrets.";
+        "Failed to reach AI API. Please verify your NVIDIA_API_KEY in Vercel Project Settings.";
       showToast(errText, "error");
       setMessages((prev) => [
         ...prev,
@@ -367,7 +361,7 @@ export const BusinessAgentPage: React.FC = () => {
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse shrink-0" />
             <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-[var(--color-primary-text)] uppercase font-mono">
-              MULTI-MODEL GEMINI AGENT • FUNCTION CALLING & GOOGLE SEARCH GROUNDING
+              NVIDIA DEEPSEEK AGENT • CONTRACT REASONING & ACTIONS
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[var(--color-text-main)] tracking-tight flex items-center gap-2.5">
@@ -375,7 +369,7 @@ export const BusinessAgentPage: React.FC = () => {
             <span>Busitech AI Business Agent</span>
           </h1>
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            Multi-turn conversational chatbot with selectable Gemini models, role personas, Google Search grounding, and structured clause extraction.
+            Multi-turn conversational chatbot powered by NVIDIA DeepSeek (deepseek-ai/deepseek-v4.1-flash) for contract analysis, obligation tracking, and structured reasoning.
           </p>
         </div>
 
@@ -459,7 +453,7 @@ export const BusinessAgentPage: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <Cpu className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
                   <select
-                    aria-label="Select Gemini Model"
+                    aria-label="Select AI Model"
                     value={useSearchGrounding ? "gemini-3.8-flash" : selectedModel}
                     disabled={useSearchGrounding}
                     onChange={(e) =>
@@ -535,7 +529,7 @@ export const BusinessAgentPage: React.FC = () => {
                         <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--color-primary-text)] flex items-center gap-1.5">
                           <Wrench className="w-3 h-3 shrink-0" />
                           <span>
-                            Invoked {msg.toolCalls.length} Gemini{" "}
+                            Invoked {msg.toolCalls.length} AI{" "}
                             {msg.toolCalls.length === 1 ? "Tool" : "Tools"}
                           </span>
                         </div>

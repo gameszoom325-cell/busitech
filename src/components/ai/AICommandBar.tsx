@@ -78,15 +78,37 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
       const msg = String(err?.message || "");
       let friendly = "Unable to process AI command. Please try again shortly.";
 
-      if (msg.includes("MISSING_API_KEY") || msg.includes("Missing Gemini API Key")) {
-        friendly = "Gemini API key is not configured. Please add GEMINI_API_KEY in Vercel Project Settings.";
+      if (
+        msg.includes("MISSING_API_KEY") ||
+        msg.includes("Missing NVIDIA API Key") ||
+        msg.includes("NVIDIA_API_KEY") ||
+        msg.includes("Missing Gemini API Key")
+      ) {
+        friendly =
+          "NVIDIA API key is not configured. Please add NVIDIA_API_KEY in Vercel Project Settings.";
       } else if (msg.includes("404") || msg.includes("NOT_FOUND")) {
-        friendly = "AI service endpoint is temporarily unavailable. Please retry in a moment.";
-      } else if (msg.includes("429") || msg.includes("quota") || msg.includes("RATE_LIMITED") || msg.includes("RESOURCE_EXHAUSTED")) {
-        friendly = "Gemini request rate limit reached. Please wait a moment before trying again.";
-      } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-        friendly = "Network connection failed. Please check your internet connection.";
-      } else if (err?.message && !err.message.includes("<!doctype") && !err.message.includes("<html") && err.message.length < 120) {
+        friendly =
+          "AI service endpoint is temporarily unavailable. Please retry in a moment.";
+      } else if (
+        msg.includes("429") ||
+        msg.includes("quota") ||
+        msg.includes("RATE_LIMITED") ||
+        msg.includes("RESOURCE_EXHAUSTED")
+      ) {
+        friendly =
+          "AI request rate limit reached. Please wait a moment before trying again.";
+      } else if (
+        msg.includes("Failed to fetch") ||
+        msg.includes("NetworkError")
+      ) {
+        friendly =
+          "Network connection failed. Please check your internet connection.";
+      } else if (
+        err?.message &&
+        !err.message.includes("<!doctype") &&
+        !err.message.includes("<html") &&
+        err.message.length < 120
+      ) {
         friendly = err.message;
       }
 
@@ -166,7 +188,7 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
         <div className="p-3 rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] text-xs flex items-start gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="space-y-1 flex-1 min-w-0">
-            <div className="font-bold">Gemini Command Error</div>
+            <div className="font-bold">DeepSeek Command Error</div>
             <div className="break-words">{error}</div>
           </div>
         </div>
@@ -181,7 +203,7 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
               <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-subtle)] flex items-center gap-1.5">
                 <Wrench className="w-3 h-3 text-[var(--color-primary)]" />
                 <span>
-                  Gemini Tool Calls Executed ({result.toolCalls.length})
+                  AI Tool Calls Executed ({result.toolCalls.length})
                 </span>
               </div>
               <div className="space-y-1.5">
@@ -246,7 +268,7 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
           {/* Footer link to open full AI Business Agent */}
           <div className="pt-2 border-t border-[var(--color-border-subtle)] flex items-center justify-between gap-2">
             <span className="text-[10px] font-mono text-[var(--color-text-subtle)]">
-              Model: gemini-3.8-flash • Server-side Tool Calling
+              Model: deepseek-ai/deepseek-v4.1-flash • NVIDIA NIM
             </span>
             <button
               type="button"

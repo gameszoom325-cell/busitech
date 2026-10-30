@@ -11,11 +11,13 @@ import {
   AgentRolePersona,
 } from "./server/businessTools.ts";
 import {
-  GEMINI_FLASH_MODEL,
-  ALLOWED_GEMINI_MODELS,
-  hasValidGeminiApiKey,
-  formatGeminiError,
-} from "./server/geminiClient.ts";
+  NVIDIA_MODEL,
+  ALLOWED_MODELS,
+  hasValidNvidiaApiKey,
+  formatNvidiaError,
+  getNvidiaClient,
+} from "./server/nvidiaClient.ts";
+import { formatGeminiError } from "./server/geminiClient.ts";
 import { buildContractMetadataPayload } from "./src/services/contractCache.ts";
 import { verifyAuth, optionalAuth, AuthenticatedRequest } from "./src/middleware/auth.ts";
 import {
@@ -298,14 +300,15 @@ async function startServer() {
   });
 
   /**
-   * Shared handler for GET /api/ai/status and GET /api/gemini/status
+   * Shared handler for GET /api/ai/status
    */
   const handleStatusRequest = (_req: Request, res: Response) => {
-    const connected = hasValidGeminiApiKey();
+    const connected = hasValidNvidiaApiKey();
     res.json({
       connected,
-      model: GEMINI_FLASH_MODEL,
-      availableModels: ALLOWED_GEMINI_MODELS,
+      provider: "NVIDIA",
+      model: NVIDIA_MODEL,
+      availableModels: ALLOWED_MODELS,
       endpoints: [
         "POST /api/ai/chat",
         "POST /api/ai/analyze",
@@ -320,73 +323,138 @@ async function startServer() {
         ? {}
         : {
             message:
-              "GEMINI_API_KEY is missing or set to a placeholder. Add your key in .env or Settings > Secrets.",
+              "NVIDIA_API_KEY is missing. Set NVIDIA_API_KEY in your environment variables.",
           }),
     });
   };
 
   app.get("/api/ai/status", handleStatusRequest);
-  app.get("/api/gemini/status", handleStatusRequest);
 
   /**
    * POST /api/ai/chat
-   * General AI conversation & Busitech multi-turn workspace assistant.
-   * Supports both compact command mode and full multi-turn agent conversation with tool calling.
+   * Powered by NVIDIA OpenAI-compatible API (DeepSeek V4.1 Flash)
    */
   app.post(
     "/api/ai/chat",
     aiRateLimitMiddleware,
     async (req: Request, res: Response) => {
       try {
+        const body = req.body || {};
         const {
           prompt,
           message,
+          messages: inputMessages,
           history,
-          snapshot,
-          mode,
-          model,
-          rolePersona,
-          useSearchGrounding,
-        } = req.body || {};
+        } = body;
 
-        const rawPrompt =
-          typeof prompt === "string"
-            ? prompt
-            : typeof message === "string"
-            ? message
-            : "";
+        const client = getNvidiaClient();
 
-        if (!rawPrompt.trim()) {
+        const systemPrompt = `You are the AI Business Assistant for Contract2Action AI (Busitech).
+You help enterprise users track contracts, audit legal obligations, monitor upcoming compliance deadlines, and triage human-in-the-loop approval workflows.
+Platform routes: Overview (/overview), Contracts (/contracts), Obligations (/obligations), Approvals (/approvals), Activity Log (/activity), Settings (/settings).
+Keep answers concise, direct, professional, and actionable.`;
+
+        const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+          { role: "system", content: systemPrompt },
+        ];
+
+        if (Array.isArray(inputMessages) && inputMessages.length > 0) {
+          for (const m of inputMessages) {
+            messages.push({
+              role: m.role === "assistant" ? "assistant" : "user",
+              content: String(m.content || m.text || ""),
+            });
+          }
+        } else if (Array.isArray(history) && history.length > 0) {
+          for (const h of history) {
+            messages.push({
+              role:
+                h.role === "model" || h.role === "assistant"
+                  ? "assistant"
+                  : "user",
+              content: String(h.text || h.content || ""),
+            });
+          }
+        }
+
+        const userPrompt = String(message || prompt || "").trim();
+        if (userPrompt) {
+          messages.push({ role: "user", content: userPrompt });
+        }
+
+        if (messages.length === 1 && !userPrompt) {
           res.status(400).json({
-            error: "Please provide a non-empty prompt or message for AI chat.",
+            error: "Please provide a non-empty message or prompt.",
             code: "INVALID_REQUEST",
           });
           return;
         }
 
-        if (rawPrompt.length > MAX_INPUT_CHARS) {
-          res.status(400).json({
-            error: `Input exceeds maximum allowed length of ${MAX_INPUT_CHARS} characters.`,
-            code: "INPUT_TOO_LARGE",
-          });
-          return;
+        const clientActions: Array<{ type: string; payload: Record<string, unknown> }> = [];
+        const lowerPrompt = userPrompt.toLowerCase();
+        if (
+          lowerPrompt.includes("go to contracts") ||
+          lowerPrompt.includes("open contracts") ||
+          lowerPrompt.includes("view contracts")
+        ) {
+          clientActions.push({ type: "NAVIGATE", payload: { route: "/contracts" } });
+        } else if (
+          lowerPrompt.includes("go to obligations") ||
+          lowerPrompt.includes("open obligations") ||
+          lowerPrompt.includes("view obligations")
+        ) {
+          clientActions.push({ type: "NAVIGATE", payload: { route: "/obligations" } });
+        } else if (
+          lowerPrompt.includes("go to approvals") ||
+          lowerPrompt.includes("open approvals") ||
+          lowerPrompt.includes("view approvals")
+        ) {
+          clientActions.push({ type: "NAVIGATE", payload: { route: "/approvals" } });
+        } else if (
+          lowerPrompt.includes("go to overview") ||
+          lowerPrompt.includes("open overview")
+        ) {
+          clientActions.push({ type: "NAVIGATE", payload: { route: "/overview" } });
+        } else if (
+          lowerPrompt.includes("dark mode") ||
+          lowerPrompt.includes("theme dark")
+        ) {
+          clientActions.push({ type: "SET_THEME", payload: { theme: "dark" } });
+        } else if (
+          lowerPrompt.includes("light mode") ||
+          lowerPrompt.includes("theme light")
+        ) {
+          clientActions.push({ type: "SET_THEME", payload: { theme: "light" } });
         }
 
-        const result = await runBusinessAgentWithTools({
-          prompt: rawPrompt.trim(),
-          history: Array.isArray(history) ? history : [],
-          snapshot,
-          mode: mode === "command" ? "command" : "agent",
-          model: typeof model === "string" ? model : undefined,
-          rolePersona: rolePersona as AgentRolePersona | undefined,
-          useSearchGrounding: Boolean(useSearchGrounding),
+        const completion = await client.chat.completions.create({
+          model: NVIDIA_MODEL,
+          messages,
+          temperature: 0.7,
+          top_p: 0.95,
+          max_tokens: 2048,
+          stream: false,
         });
 
-        res.json(result);
+        const replyText =
+          completion.choices[0]?.message?.content?.trim() ||
+          "Action completed successfully.";
+
+        res.json({
+          reply: replyText,
+          toolCalls: [],
+          clientActions,
+          suggestedFollowUps: [
+            "Analyze portfolio risk distribution",
+            "Show all overdue obligations",
+            "Review pending human-gate approvals",
+          ],
+          modelUsed: NVIDIA_MODEL,
+        });
       } catch (err: unknown) {
-        const formatted = formatGeminiError(
+        const formatted = formatNvidiaError(
           err,
-          "Failed to process AI chat request with Gemini API."
+          "Failed to process AI chat request with NVIDIA DeepSeek API."
         );
         console.warn(`[/api/ai/chat] ${formatted.code}: ${formatted.message}`);
         res.status(formatted.status).json({
@@ -697,7 +765,7 @@ async function startServer() {
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(
-      `Busitech Server running on http://localhost:${PORT} (Gemini API key configured: ${hasValidGeminiApiKey()})`
+      `Busitech Server running on http://localhost:${PORT} (NVIDIA API key configured: ${hasValidNvidiaApiKey()})`
     );
   });
 }

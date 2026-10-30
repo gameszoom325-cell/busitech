@@ -110,7 +110,7 @@ export const OverviewPage: React.FC = () => {
               Busitech AI Command Bar
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary-text)] border border-[var(--color-primary-border)] font-semibold">
-              Gemini 3.8 Flash • Tool Calling
+              DeepSeek V4.1 Flash • NVIDIA AI
             </span>
           </div>
           <button
@@ -487,7 +487,7 @@ export const OverviewPage: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-[var(--color-text-main)] leading-relaxed break-words">
-              3 draft notifications were prepared from trigger conditions. Launch the AI Business Agent to inspect clauses, run risk audits, or resolve approvals via Gemini tool calling.
+              3 draft notifications were prepared from trigger conditions. Launch the AI Business Agent to inspect clauses, run risk audits, or resolve approvals via DeepSeek AI.
             </p>
             <button
               type="button"

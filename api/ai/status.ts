@@ -1,9 +1,8 @@
 import {
-  hasValidGeminiApiKey,
-  GEMINI_FLASH_MODEL,
-  ALLOWED_GEMINI_MODELS,
-} from "../../server/geminiClient.ts";
-import { BUSINESS_TOOL_DECLARATIONS } from "../../server/businessTools.ts";
+  hasValidNvidiaApiKey,
+  NVIDIA_MODEL,
+  ALLOWED_MODELS,
+} from "../../server/nvidiaClient.ts";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -15,26 +14,18 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const connected = hasValidGeminiApiKey();
+  const connected = hasValidNvidiaApiKey();
   res.status(200).json({
     connected,
-    model: GEMINI_FLASH_MODEL,
-    availableModels: ALLOWED_GEMINI_MODELS,
-    endpoints: [
-      "POST /api/ai/chat",
-      "POST /api/ai/analyze",
-      "POST /api/ai/insights",
-    ],
-    toolsCount: BUSINESS_TOOL_DECLARATIONS.length,
-    tools: BUSINESS_TOOL_DECLARATIONS.map((t) => ({
-      name: t.name,
-      description: t.description,
-    })),
+    provider: "NVIDIA",
+    model: NVIDIA_MODEL,
+    availableModels: ALLOWED_MODELS,
+    endpoints: ["POST /api/ai/chat"],
     ...(connected
       ? {}
       : {
           message:
-            "GEMINI_API_KEY is missing or set to a placeholder. Set GEMINI_API_KEY in Vercel Project Settings > Environment Variables.",
+            "NVIDIA_API_KEY is missing. Set NVIDIA_API_KEY in Vercel Project Settings > Environment Variables.",
         }),
   });
 }
