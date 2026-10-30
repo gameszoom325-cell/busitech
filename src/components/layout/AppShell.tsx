@@ -21,20 +21,28 @@ import {
   Info,
   Copy,
   Check,
-  User as UserIcon
+  User as UserIcon,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Avatar } from '../common/Avatar';
 import { CommandPalette } from '../common/CommandPalette';
+import { GlobalSearch } from '../common/GlobalSearch';
+import { OfflineCacheBanner, PWAInstallButton } from '../common/PWAInstallButton';
 import { MOCK_NOTIFICATIONS } from '../../data/mockData';
 import { NotificationItem } from '../../types';
+import { useUpcomingDeadlines } from '../../hooks/useUpcomingDeadlines';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAdmin, isGuest, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Monitor upcoming contract deadlines and trigger Toast notifications for obligations expiring within 48 hours
+  useUpcomingDeadlines({ windowHours: 48, autoNotify: true });
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -77,6 +85,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const navItems = [
     { name: 'Overview', path: '/overview', icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
+    { name: 'AI Business Agent', path: '/agent', icon: <Bot className="w-4 h-4 shrink-0 text-[var(--color-primary)]" /> },
     { name: 'Contracts', path: '/contracts', icon: <FileText className="w-4 h-4 shrink-0" /> },
     { name: 'Obligations', path: '/obligations', icon: <CheckSquare className="w-4 h-4 shrink-0" /> },
     { name: 'Approvals', path: '/approvals', icon: <ShieldAlert className="w-4 h-4 shrink-0" /> },
@@ -140,6 +149,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         </div>
       )}
 
+      {/* Global Offline / Cached Contract Metadata Banner */}
+      <OfflineCacheBanner />
+
       {/* TOP BAR - Fits on one line at all widths */}
       <header className="sticky top-0 z-[var(--z-header)] h-14 bg-[var(--color-bg-header)] border-b border-[var(--color-border)] px-2 sm:px-4 lg:px-6 flex items-center justify-between gap-1.5 sm:gap-3 shrink-0">
         {/* Left: Mobile Menu Trigger + Brand + Breadcrumbs */}
@@ -171,27 +183,22 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </div>
         </div>
 
-        {/* Right: Search + Notifications + Upload + Theme + User */}
+        {/* Right: Global Search + AI Command Bar + PWA Install + Notifications + Upload + Theme + User */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Search: Full box on lg screens, icon on smaller screens */}
-          <button
-            onClick={() => setIsCommandOpen(true)}
-            className="hidden lg:flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] text-[var(--color-text-subtle)] hover:text-[var(--color-text-main)] hover:border-[var(--color-border-hover)] transition-colors w-40 xl:w-56"
-          >
-            <Search className="w-3.5 h-3.5 text-[var(--color-text-subtle)] shrink-0" />
-            <span className="truncate">Search...</span>
-            <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)]">
-              ⌘K
-            </span>
-          </button>
+          {/* Global Search Bar for Contracts, Obligations, and Activity Logs */}
+          <GlobalSearch onOpenCommandPalette={() => setIsCommandOpen(true)} />
 
-          {/* Search Icon button for screens < 1024px */}
+          {/* PWA Install Button */}
+          <PWAInstallButton />
+
+          {/* AI Command Bar Trigger */}
           <button
             onClick={() => setIsCommandOpen(true)}
-            className="lg:hidden p-2 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center"
-            aria-label="Open search command palette"
+            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-[var(--color-primary-border)] bg-[var(--color-primary-light)]/50 text-[var(--color-primary-text)] hover:border-[var(--color-primary)] transition-colors shrink-0 cursor-pointer min-h-[36px]"
+            title="Open AI Command Bar (⌘K)"
           >
-            <Search className="w-4 h-4 shrink-0" />
+            <Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
+            <span className="font-semibold whitespace-nowrap">AI Command</span>
           </button>
 
           {/* Notifications Dropdown */}

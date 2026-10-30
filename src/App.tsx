@@ -16,6 +16,7 @@ const ContractsListPage = lazy(() => import('./pages/ContractsListPage').then(m 
 const ActivityLogPage = lazy(() => import('./pages/ActivityLogPage').then(m => ({ default: m.ActivityLogPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const AdminPortalPage = lazy(() => import('./pages/AdminPortalPage').then(m => ({ default: m.AdminPortalPage })));
+const BusinessAgentPage = lazy(() => import('./pages/BusinessAgentPage').then(m => ({ default: m.BusinessAgentPage })));
 const ForbiddenPage = lazy(() => import('./pages/ForbiddenPage').then(m => ({ default: m.ForbiddenPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
@@ -204,6 +205,14 @@ export default function App() {
                   element={
                     <ProtectedRoute>
                       <ActivityLogPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/agent"
+                  element={
+                    <ProtectedRoute>
+                      <BusinessAgentPage />
                     </ProtectedRoute>
                   }
                 />

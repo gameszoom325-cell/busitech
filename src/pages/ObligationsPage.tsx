@@ -21,12 +21,19 @@ import { MOCK_OBLIGATIONS, MOCK_CONTRACTS } from '../data/mockData';
 import { Obligation, ObligationStatus } from '../types';
 import { Avatar } from '../components/common/Avatar';
 import { ManualObligationModal } from '../components/modals/ManualObligationModal';
+import { SmartExportModal, SmartExportButton } from '../components/modals/SmartExportModal';
+import { useUpcomingDeadlines } from '../hooks/useUpcomingDeadlines';
 
 export const ObligationsPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
   const [obligations, setObligations] = useState<Obligation[]>(MOCK_OBLIGATIONS);
+  const { expiringWithin48Hours, notifyExpiringDeadlines } = useUpcomingDeadlines({
+    obligations,
+    windowHours: 48,
+    autoNotify: true
+  });
   const [activeTab, setActiveTab] = useState<'All' | 'Pending' | 'In Progress' | 'Completed' | 'Overdue'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContract, setSelectedContract] = useState('All Contracts');
@@ -124,7 +131,9 @@ export const ObligationsPage: React.FC = () => {
       ...newOb,
       id: `ob_${Date.now()}`
     };
+    MOCK_OBLIGATIONS.unshift(created);
     setObligations(prev => [created, ...prev]);
+    window.dispatchEvent(new CustomEvent('c2a:data-updated'));
   };
 
   const getStatusChip = (status: ObligationStatus) => {
@@ -181,6 +190,27 @@ export const ObligationsPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              onClick={() => {
+                const count = notifyExpiringDeadlines(true);
+                if (count === 0) {
+                  showToast('No active obligations expiring within the next 48 hours', 'info');
+                }
+              }}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] text-[var(--color-warning-text)] hover:opacity-90 transition-opacity shadow-xs min-h-[40px] sm:min-h-[36px] cursor-pointer"
+              title="Trigger Toast notifications for obligations expiring within 48 hours"
+            >
+              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">
+                48h Alerts ({expiringWithin48Hours.length})
+              </span>
+            </button>
+
+            <SmartExportButton
+              label="Smart Export"
+              customObligations={filteredObligations}
+            />
+
             <button
               onClick={handleExportCSV}
               className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-main)] transition-colors shadow-xs min-h-[40px] sm:min-h-[36px]"

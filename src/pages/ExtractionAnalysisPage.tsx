@@ -20,11 +20,16 @@ import { StatusChip } from '../components/common/StatusChip';
 import { useToast } from '../context/ToastContext';
 import { MOCK_ANALYSIS_OBLIGATIONS } from '../data/mockData';
 import { Obligation } from '../types';
+import { SmartExportButton } from '../components/modals/SmartExportModal';
+import { useContractCache } from '../hooks/useContractCache';
 
 export const ExtractionAnalysisPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { getContractSummary, isOfflineMode, cacheSource } = useContractCache();
+
+  const cachedContract = getContractSummary(id || 'ctr_stripe_msa');
 
   const [selectedObligation, setSelectedObligation] = useState<Obligation>(MOCK_ANALYSIS_OBLIGATIONS[2]);
   const [docViewMode, setDocViewMode] = useState<'extracted' | 'original'>('extracted');
@@ -79,20 +84,25 @@ export const ExtractionAnalysisPage: React.FC = () => {
       {/* Top Breadcrumb & Title Section */}
       <div>
         <div className="text-[10px] sm:text-[11px] font-bold tracking-wider text-[var(--color-text-subtle)] uppercase mb-1 truncate">
-          CONTRACTS / STRIPE ENTERPRISE MSA / EXTRACTION ANALYSIS
+          CONTRACTS / {(cachedContract?.code || 'CTR-2025-882').toUpperCase()} / EXTRACTION ANALYSIS
         </div>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
           <div className="flex items-center flex-wrap gap-2.5 min-w-0">
             <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-[var(--color-text-main)] tracking-tight truncate">
-              Stripe Enterprise Master Services Agreement (2025)
+              {cachedContract?.name || 'Stripe Enterprise Master Services Agreement (2025)'}
             </h1>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[var(--color-success-bg)] text-[var(--color-success-text)] border border-[var(--color-success-border)] shrink-0 whitespace-nowrap">
               <Check className="w-3.5 h-3.5 shrink-0" />
-              <span>6 Obligations Extracted</span>
+              <span>{cachedContract?.obligationsCount || 6} Obligations Extracted</span>
             </span>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <SmartExportButton
+              label="Smart Export (PDF / CSV)"
+              defaultContractId={id || 'ctr_stripe_msa'}
+              customObligations={filteredObligations}
+            />
             <button
               onClick={() => navigate('/obligations')}
               className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-main)] transition-colors shadow-xs min-h-[40px] sm:min-h-[36px]"
@@ -110,18 +120,30 @@ export const ExtractionAnalysisPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Info Banner */}
+      {/* Info Banner with Cached Executive Summary */}
       <div className="p-3.5 rounded-xl border border-[var(--color-primary-border)] bg-[var(--color-primary-light)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-1.5 rounded-md bg-[var(--color-primary)] text-white shrink-0">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <div className="p-1.5 rounded-md bg-[var(--color-primary)] text-white shrink-0 mt-0.5">
             <Sparkles className="w-4 h-4 shrink-0" />
           </div>
-          <p className="text-xs text-[var(--color-text-main)] leading-relaxed break-words">
-            <strong className="font-semibold">AI-Assisted Extraction:</strong> obligations were parsed from legal language and cross-referenced with section clauses. Highlighted items indicate conditional ambiguity requiring legal counsel review.
-          </p>
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs text-[var(--color-text-main)] leading-relaxed break-words">
+              <strong className="font-semibold">Cached Executive Summary ({cachedContract?.counterparty || 'Stripe Inc.'}):</strong>{' '}
+              {cachedContract?.executiveSummary || 'Obligations were parsed from legal language and cross-referenced with section clauses.'}
+            </p>
+            {cachedContract && (
+              <div className="flex items-center gap-3 flex-wrap text-[11px] font-mono text-[var(--color-primary-text)]">
+                <span>Value: {cachedContract.annualContractValue}</span>
+                <span>•</span>
+                <span>Governing Law: {cachedContract.governingLaw}</span>
+                <span>•</span>
+                <span>Renewal: {cachedContract.renewalTerms}</span>
+              </div>
+            )}
+          </div>
         </div>
         <div className="text-[10px] sm:text-[11px] font-mono text-[var(--color-primary-text)] shrink-0 self-start sm:self-center font-medium whitespace-nowrap">
-          Demo model • Verified clauses
+          {isOfflineMode ? `Offline Cache (${cacheSource})` : `Cached (${cacheSource})`}
         </div>
       </div>
 

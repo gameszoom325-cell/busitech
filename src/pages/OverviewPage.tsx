@@ -8,13 +8,17 @@ import {
   ArrowRight,
   Sparkles,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Bot
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { MOCK_CONTRACTS } from '../data/mockData';
 import { ObligationsBarChart } from '../components/charts/ObligationsBarChart';
 import { RiskDonutChart } from '../components/charts/RiskDonutChart';
+import { ContractOverviewWidget } from '../components/charts/ContractOverviewWidget';
+import { AICommandBar } from '../components/ai/AICommandBar';
+import { SmartExportButton } from '../components/modals/SmartExportModal';
 
 export const OverviewPage: React.FC = () => {
   const { user } = useAuth();
@@ -73,6 +77,8 @@ export const OverviewPage: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <SmartExportButton label="Smart Export" />
+
           <button
             onClick={() => {
               setFilterViewActive(!filterViewActive);
@@ -89,6 +95,14 @@ export const OverviewPage: React.FC = () => {
           </button>
 
           <button
+            onClick={() => navigate('/agent')}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border border-[var(--color-primary-border)] bg-[var(--color-primary-light)] text-[var(--color-primary-text)] hover:bg-[var(--color-primary)] hover:text-white transition-colors min-h-[40px] sm:min-h-[36px] cursor-pointer"
+          >
+            <Bot className="w-3.5 h-3.5 shrink-0" />
+            <span className="whitespace-nowrap">AI Business Agent</span>
+          </button>
+
+          <button
             onClick={() => navigate('/upload')}
             className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors shadow-xs min-h-[40px] sm:min-h-[36px]"
           >
@@ -96,6 +110,30 @@ export const OverviewPage: React.FC = () => {
             <span className="whitespace-nowrap">Upload Contract</span>
           </button>
         </div>
+      </div>
+
+      {/* BUSITECH AI COMMAND BAR (GEMINI + TOOL CALLING) */}
+      <div className="p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-[var(--shadow-card)] space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
+            <span className="text-xs font-bold text-[var(--color-text-main)]">
+              Busitech AI Command Bar
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary-text)] border border-[var(--color-primary-border)] font-semibold">
+              Gemini 3.8 Flash • Tool Calling
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/agent')}
+            className="text-xs font-semibold text-[var(--color-primary-text)] hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>Full Agent Studio</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <AICommandBar />
       </div>
 
       {/* 4 STAT CARDS IN A RESPONSIVE GRID: 2 columns on phone, 4 on desktop */}
@@ -184,6 +222,9 @@ export const OverviewPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* RECHARTS CONTRACT OVERVIEW WIDGET */}
+      <ContractOverviewWidget />
 
       {/* MAIN TWO-COLUMN SECTION (Tables on desktop, stacked on tablet/mobile) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6 items-start">
@@ -441,16 +482,29 @@ export const OverviewPage: React.FC = () => {
           </div>
 
           {/* Agent Note */}
-          <div className="p-4 rounded-xl border border-[var(--color-primary-border)] bg-[var(--color-primary-light)] space-y-2">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
-              <span className="text-xs font-bold text-[var(--color-primary-text)]">
-                Contract2Action Agent
+          <div className="p-4 rounded-xl border border-[var(--color-primary-border)] bg-[var(--color-primary-light)] space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
+                <span className="text-xs font-bold text-[var(--color-primary-text)]">
+                  Busitech AI Business Agent
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-[var(--color-primary-text)]">
+                8 Tools Active
               </span>
             </div>
             <p className="text-xs text-[var(--color-text-main)] leading-relaxed break-words">
-              3 draft notifications were prepared from trigger conditions. They are waiting for your approval before anything is sent.
+              3 draft notifications were prepared from trigger conditions. Launch the AI Business Agent to inspect clauses, run risk audits, or resolve approvals via Gemini tool calling.
             </p>
+            <button
+              type="button"
+              onClick={() => navigate('/agent')}
+              className="w-full py-2 px-3 rounded-lg text-xs font-bold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Bot className="w-3.5 h-3.5" />
+              <span>Launch AI Business Agent</span>
+            </button>
           </div>
         </div>
       </div>
