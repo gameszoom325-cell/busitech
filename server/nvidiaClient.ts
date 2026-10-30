@@ -1,7 +1,4 @@
 import OpenAI from "openai";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 export const NVIDIA_MODEL = "deepseek-ai/deepseek-v4.1-flash";
 export const ALLOWED_MODELS = [
@@ -21,29 +18,21 @@ export function hasValidNvidiaApiKey(): boolean {
   return resolveNvidiaApiKey() !== null;
 }
 
-let nvidiaClientInstance: OpenAI | null = null;
-let cachedKey: string | null = null;
-
-export function getNvidiaClient(): OpenAI {
-  const apiKey = resolveNvidiaApiKey();
+export function getNvidiaClient(overrideApiKey?: string): OpenAI {
+  const apiKey = (overrideApiKey || resolveNvidiaApiKey() || "").trim();
   if (!apiKey) {
     const err = new Error(
-      "Missing NVIDIA API Key: NVIDIA_API_KEY is not configured. Please add NVIDIA_API_KEY in your environment variables."
+      "NVIDIA API key is not configured. Please add NVIDIA_API_KEY in Vercel Project Settings > Environment Variables."
     ) as Error & { status?: number; code?: string };
     err.status = 401;
     err.code = "MISSING_API_KEY";
     throw err;
   }
 
-  if (!nvidiaClientInstance || cachedKey !== apiKey) {
-    nvidiaClientInstance = new OpenAI({
-      baseURL: "https://integrate.api.nvidia.com/v1",
-      apiKey,
-    });
-    cachedKey = apiKey;
-  }
-
-  return nvidiaClientInstance;
+  return new OpenAI({
+    baseURL: "https://integrate.api.nvidia.com/v1",
+    apiKey,
+  });
 }
 
 export function formatNvidiaError(

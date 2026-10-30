@@ -60,9 +60,9 @@ const MODEL_OPTIONS: Array<{
   },
   {
     id: "gemini-3.8-flash",
-    label: "Gemini 3.8 Flash (Fallback)",
-    badge: "General & Search",
-    description: "Balanced reasoning, workspace tool calling & Google Search grounding",
+    label: "DeepSeek V4.1 Flash (Fallback)",
+    badge: "NVIDIA NIM",
+    description: "Resilient fallback routing via NVIDIA DeepSeek endpoint",
   },
 ];
 
@@ -108,10 +108,10 @@ const AGENT_PLAYBOOKS = [
   {
     id: "pb_search_reg",
     title: "Live Web Search: Cloud & SOC 2 Compliance",
-    subtitle: "Google Search Grounding via gemini-3.8-flash",
+    subtitle: "Regulatory Search via DeepSeek V4.1 Flash",
     useSearch: true,
     prompt:
-      "Search Google for the latest 2025 enterprise SOC 2 Type II, DORA, and GDPR cloud vendor compliance requirements impacting Stripe, AWS, and Snowflake contracts.",
+      "Search and analyze the latest 2025 enterprise SOC 2 Type II, DORA, and GDPR cloud vendor compliance requirements impacting Stripe, AWS, and Snowflake contracts.",
   },
   {
     id: "pb_notice",
@@ -304,7 +304,7 @@ export const BusinessAgentPage: React.FC = () => {
       });
       setExtractionResult(res);
       showToast(
-        `Extracted ${res.extractedObligations.length} obligations with Gemini`,
+        `Extracted ${res.extractedObligations.length} obligations with DeepSeek`,
         "success"
       );
     } catch (err: any) {
@@ -325,7 +325,7 @@ export const BusinessAgentPage: React.FC = () => {
     try {
       await api.addObligation({
         title: item.title,
-        tag: "GEMINI EXTRACTED",
+        tag: "AI EXTRACTED",
         clauseRef: item.clauseRef,
         description: item.description,
         contractId: "ctr_stripe_msa",
@@ -419,7 +419,7 @@ export const BusinessAgentPage: React.FC = () => {
                     </div>
                     <div className="text-[10px] font-mono text-[var(--color-text-muted)] truncate">
                       {useSearchGrounding
-                        ? "Google Search Grounding Active (gemini-3.8-flash)"
+                        ? "Regulatory Search Active (DeepSeek V4.1 Flash)"
                         : `${selectedModel} • 8 Workspace Tools Active`}
                     </div>
                   </div>
@@ -497,11 +497,11 @@ export const BusinessAgentPage: React.FC = () => {
                       ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
                       : "bg-[var(--color-bg-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:text-[var(--color-text-main)]"
                   }`}
-                  title="Enable live Google Search Grounding (uses gemini-3.8-flash with googleSearch tool)"
+                  title="Enable live regulatory search via NVIDIA DeepSeek"
                 >
                   <Globe className="w-3.5 h-3.5 shrink-0" />
                   <span>
-                    Google Search Grounding: {useSearchGrounding ? "ON" : "OFF"}
+                    Regulatory Search: {useSearchGrounding ? "ON" : "OFF"}
                   </span>
                 </button>
               </div>
@@ -632,7 +632,7 @@ export const BusinessAgentPage: React.FC = () => {
                     <Loader2 className="w-4 h-4 animate-spin text-[var(--color-primary)] shrink-0" />
                     <span>
                       {useSearchGrounding
-                        ? "Searching live web data with Gemini 3.8 Flash (googleSearch)..."
+                        ? "Searching live regulatory data with DeepSeek V4.1 Flash..."
                         : `Reasoning with ${selectedModel} and executing workspace tools...`}
                     </span>
                   </div>
@@ -724,7 +724,7 @@ export const BusinessAgentPage: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <Terminal className="w-4 h-4 text-[var(--color-primary)]" />
                   <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-main)]">
-                    Registered Gemini Tools
+                    Registered AI Tools
                   </h2>
                 </div>
                 <span className="text-[10px] font-mono text-[var(--color-success)] font-bold">
@@ -797,10 +797,10 @@ export const BusinessAgentPage: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
               <div>
                 <h2 className="text-sm font-bold text-[var(--color-text-main)]">
-                  Gemini Structured Contract Extractor
+                  Structured Contract Obligation Extractor
                 </h2>
                 <p className="text-[11px] text-[var(--color-text-muted)]">
-                  Uses Gemini JSON Schema (`Type.OBJECT` / `Type.ARRAY`) to extract obligations
+                  Uses AI schema analysis to extract actionable obligations
                 </p>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--color-primary-light)] text-[var(--color-primary-text)] font-bold">
@@ -863,7 +863,7 @@ export const BusinessAgentPage: React.FC = () => {
               {isExtracting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Extracting Structured Obligations with Gemini...</span>
+                  <span>Extracting Structured Obligations with AI...</span>
                 </>
               ) : (
                 <>
@@ -899,7 +899,7 @@ export const BusinessAgentPage: React.FC = () => {
                   Click &ldquo;Extract Actionable Obligations&rdquo; to analyze clauses
                 </div>
                 <p className="text-[11px] text-[var(--color-text-subtle)] max-w-sm mx-auto">
-                  Gemini will parse deadlines, risk levels, responsible owners, and clause references into structured records.
+                  AI will parse deadlines, risk levels, responsible owners, and clause references into structured records.
                 </p>
               </div>
             ) : (

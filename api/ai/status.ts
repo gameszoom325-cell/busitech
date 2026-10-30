@@ -14,7 +14,9 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const connected = hasValidNvidiaApiKey();
+  // Read inside the request handler and trim
+  const apiKey = (process.env.NVIDIA_API_KEY || "").trim();
+  const connected = Boolean(apiKey && apiKey !== "your_nvidia_api_key_here");
   res.status(200).json({
     connected,
     provider: "NVIDIA",

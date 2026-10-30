@@ -347,7 +347,17 @@ async function startServer() {
           history,
         } = body;
 
-        const client = getNvidiaClient();
+        const apiKey = (process.env.NVIDIA_API_KEY || "").trim();
+        if (!apiKey) {
+          res.status(401).json({
+            error:
+              "NVIDIA API key is not configured. Please add NVIDIA_API_KEY in Vercel Project Settings > Environment Variables.",
+            code: "MISSING_API_KEY",
+          });
+          return;
+        }
+
+        const client = getNvidiaClient(apiKey);
 
         const systemPrompt = `You are the AI Business Assistant for Contract2Action AI (Busitech).
 You help enterprise users track contracts, audit legal obligations, monitor upcoming compliance deadlines, and triage human-in-the-loop approval workflows.
@@ -427,8 +437,11 @@ Keep answers concise, direct, professional, and actionable.`;
           clientActions.push({ type: "SET_THEME", payload: { theme: "light" } });
         }
 
+        const requestedModel = String(body.model || "").trim();
+        const modelToUse = NVIDIA_MODEL;
+
         const completion = await client.chat.completions.create({
-          model: NVIDIA_MODEL,
+          model: modelToUse,
           messages,
           temperature: 0.7,
           top_p: 0.95,
@@ -449,7 +462,8 @@ Keep answers concise, direct, professional, and actionable.`;
             "Show all overdue obligations",
             "Review pending human-gate approvals",
           ],
-          modelUsed: NVIDIA_MODEL,
+          modelUsed: modelToUse,
+          requestedModel: requestedModel || modelToUse,
         });
       } catch (err: unknown) {
         const formatted = formatNvidiaError(
