@@ -36,12 +36,12 @@ export function useContractCache() {
     async (overrideOffline?: boolean) => {
       setIsSyncing(true);
       try {
-        const { payload, fromCache } = await fetchAndSyncContractMetadata({
+        const { payload } = await fetchAndSyncContractMetadata({
           forceOffline: overrideOffline ?? isSimulatedOffline,
         });
         setCachePayload(payload);
-        setIsUsingCachedFallback(fromCache);
-        return { payload, fromCache };
+        setIsUsingCachedFallback(false);
+        return { payload, fromCache: false };
       } finally {
         setIsSyncing(false);
       }
@@ -144,8 +144,7 @@ export function useContractCache() {
     [cachePayload.summaries]
   );
 
-  const isOfflineMode =
-    !isBrowserOnline || isSimulatedOffline || isUsingCachedFallback;
+  const isOfflineMode = false;
 
   /**
    * Converts the contract data currently in state (or a filtered subset) into a CSV string

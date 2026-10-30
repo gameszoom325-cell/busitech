@@ -29,7 +29,8 @@
     "src",
     "vite.config.ts",
     "server.ts",
-    "server"
+    "server",
+    "api"
   ],
   "exclude": [
     "node_modules",

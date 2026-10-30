@@ -30,7 +30,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { Avatar } from '../common/Avatar';
 import { CommandPalette } from '../common/CommandPalette';
 import { GlobalSearch } from '../common/GlobalSearch';
-import { OfflineCacheBanner, PWAInstallButton } from '../common/PWAInstallButton';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 import { MOCK_NOTIFICATIONS } from '../../data/mockData';
 import { NotificationItem } from '../../types';
 import { useUpcomingDeadlines } from '../../hooks/useUpcomingDeadlines';
@@ -153,8 +153,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         </div>
       )}
 
-      {/* Global Offline / Cached Contract Metadata Banner */}
-      <OfflineCacheBanner />
 
       {/* TOP BAR - Fits on one line at all widths */}
       <header className="sticky top-0 z-[var(--z-header)] h-14 bg-[var(--color-bg-header)] border-b border-[var(--color-border)] px-2 sm:px-4 lg:px-6 flex items-center justify-between gap-1.5 sm:gap-3 shrink-0">

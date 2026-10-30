@@ -112,7 +112,7 @@ export async function generateContentWithFallback(
   const primaryModel = params.model || GEMINI_FLASH_MODEL;
 
   const fallbackOrder = Array.from(
-    new Set([primaryModel, GEMINI_FLASH_MODEL, GEMINI_FLASH_LITE_MODEL])
+    new Set([primaryModel, GEMINI_FLASH_MODEL, GEMINI_FLASH_LITE_MODEL, "gemini-2.5-flash"])
   );
 
   let lastError: unknown = null;

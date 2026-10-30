@@ -75,10 +75,22 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
       });
       setResult(response);
     } catch (err: any) {
-      setError(
-        err?.message ||
-          "Unable to execute AI command. Check your Gemini API key in Settings > Secrets."
-      );
+      const msg = String(err?.message || "");
+      let friendly = "Unable to process AI command. Please try again shortly.";
+
+      if (msg.includes("MISSING_API_KEY") || msg.includes("Missing Gemini API Key")) {
+        friendly = "Gemini API key is not configured. Please add GEMINI_API_KEY in Vercel Project Settings.";
+      } else if (msg.includes("404") || msg.includes("NOT_FOUND")) {
+        friendly = "AI service endpoint is temporarily unavailable. Please retry in a moment.";
+      } else if (msg.includes("429") || msg.includes("quota") || msg.includes("RATE_LIMITED") || msg.includes("RESOURCE_EXHAUSTED")) {
+        friendly = "Gemini request rate limit reached. Please wait a moment before trying again.";
+      } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        friendly = "Network connection failed. Please check your internet connection.";
+      } else if (err?.message && !err.message.includes("<!doctype") && !err.message.includes("<html") && err.message.length < 120) {
+        friendly = err.message;
+      }
+
+      setError(friendly);
     } finally {
       setIsLoading(false);
     }

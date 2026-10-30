@@ -234,8 +234,11 @@ async function parseApiJsonResponse<T>(
   if (!looksLikeJson) {
     // Plain text response — do not pass to JSON.parse()
     if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`AI service endpoint was not found (HTTP 404).`);
+      }
       throw new Error(
-        `Gemini request failed (${endpointName}, HTTP ${res.status}): ${trimmed.slice(0, 240)}`
+        `Gemini request failed (${endpointName}, HTTP ${res.status}): ${trimmed.slice(0, 100)}`
       );
     }
     throw new Error(
