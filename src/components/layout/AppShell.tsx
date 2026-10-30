@@ -36,13 +36,16 @@ import { NotificationItem } from '../../types';
 import { useUpcomingDeadlines } from '../../hooks/useUpcomingDeadlines';
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAdmin, isGuest, logout } = useAuth();
+  const { user, isAdmin, isGuest, logout, updateUserPreferences } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Monitor upcoming contract deadlines and trigger Toast notifications for obligations expiring within 48 hours
-  useUpcomingDeadlines({ windowHours: 48, autoNotify: true });
+  // Monitor upcoming contract deadlines using the user's configured Firebase profile alert preferences
+  useUpcomingDeadlines({
+    windowHours: user?.deadlineAlertLeadHours ?? 48,
+    autoNotify: user?.emailAlertsEnabled ?? true
+  });
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -90,6 +93,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     { name: 'Obligations', path: '/obligations', icon: <CheckSquare className="w-4 h-4 shrink-0" /> },
     { name: 'Approvals', path: '/approvals', icon: <ShieldAlert className="w-4 h-4 shrink-0" /> },
     { name: 'Activity Log', path: '/activity', icon: <History className="w-4 h-4 shrink-0" /> },
+    { name: 'Settings', path: '/settings', icon: <Settings className="w-4 h-4 shrink-0" /> },
     ...(isAdmin ? [{ name: 'Admin', path: '/admin', icon: <ShieldCheck className="w-4 h-4 shrink-0" /> }] : [])
   ];
 
@@ -432,6 +436,17 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                     <span>View Profile Details</span>
                   </button>
 
+                  <button
+                    onClick={() => {
+                      navigate('/settings');
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
+                    <span>Settings & Alert Preferences</span>
+                  </button>
+
                   {isAdmin && (
                     <button
                       onClick={() => {
@@ -558,9 +573,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               </div>
             </div>
             <button
-              onClick={() => setIsCommandOpen(true)}
-              className="hidden lg:inline-flex p-1.5 rounded-lg text-[var(--color-text-subtle)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] transition-colors"
-              title="Settings & Palette"
+              onClick={() => navigate('/settings')}
+              className="hidden lg:inline-flex p-1.5 rounded-lg text-[var(--color-text-subtle)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] transition-colors cursor-pointer"
+              title="Settings & Alert Preferences"
             >
               <Settings className="w-4 h-4 shrink-0" />
             </button>
@@ -800,6 +815,40 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 >
                   {user?.firebaseUid || user?.id || 'uid_pending'}
                 </div>
+              </div>
+
+              <div className="p-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-card)] flex items-center justify-between">
+                <div className="min-w-0 pr-2">
+                  <div className="font-semibold text-[var(--color-text-main)]">
+                    Deadline Email Alerts ({user?.deadlineAlertLeadHours ?? 48}h Window)
+                  </div>
+                  <div className="text-[10px] text-[var(--color-text-muted)]">
+                    Synced with Firebase user profile
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={user?.emailAlertsEnabled ?? true}
+                  onClick={() =>
+                    updateUserPreferences({
+                      emailAlertsEnabled: !(user?.emailAlertsEnabled ?? true)
+                    })
+                  }
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                    (user?.emailAlertsEnabled ?? true)
+                      ? 'bg-[var(--color-primary)]'
+                      : 'bg-[var(--color-border)]'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition ${
+                      (user?.emailAlertsEnabled ?? true)
+                        ? 'translate-x-5'
+                        : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               <div className="p-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-card)] flex items-center justify-between">

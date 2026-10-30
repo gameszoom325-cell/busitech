@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { User } from '../types';
+import { User, UserAlertPreferences } from '../types';
 import { authService, GuestFormData, SessionData } from '../services/auth';
 import { GoogleOAuthUser } from '../services/googleAuth';
 import {
   loginWithGoogleFirebase,
   logoutFirebase,
-  subscribeToFirebaseAuth
+  subscribeToFirebaseAuth,
+  syncFirebaseUserToBackend,
+  saveStoredFirebaseUserPreferences
 } from '../services/firebaseAuth';
 
 interface AuthContextType {
@@ -19,6 +21,7 @@ interface AuthContextType {
   clearAuthNotice: () => void;
   loginWithGoogle: (oauthUserOrEmail?: GoogleOAuthUser | string | User, name?: string) => Promise<User>;
   loginAsGuest: (data: GuestFormData) => Promise<User>;
+  updateUserPreferences: (prefs: Partial<UserAlertPreferences>) => Promise<User | null>;
   logout: () => void;
   checkSession: () => SessionData | null;
 }
@@ -54,14 +57,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
 
     // Subscribe to Firebase Auth state for automatic session restore across refreshes
-    const unsubscribeFirebase = subscribeToFirebaseAuth((fbAppUser) => {
-      if (fbAppUser) {
-        const activeSession = authService.saveFirebaseSession(fbAppUser);
-        setSession(activeSession);
-        setUser(fbAppUser);
+    const unsubscribeFirebase = subscribeToFirebaseAuth(async (fbAppUser, rawUser) => {
+      if (fbAppUser && rawUser) {
+        try {
+          const idToken = await rawUser.getIdToken();
+          const serverPrefs = await syncFirebaseUserToBackend(idToken);
+          const mergedUser: User = serverPrefs
+            ? {
+                ...fbAppUser,
+                ...saveStoredFirebaseUserPreferences(fbAppUser, serverPrefs)
+              }
+            : fbAppUser;
+          const activeSession = authService.saveFirebaseSession(mergedUser, idToken);
+          setSession(activeSession);
+          setUser(mergedUser);
+        } catch {
+          const activeSession = authService.saveFirebaseSession(fbAppUser);
+          setSession(activeSession);
+          setUser(fbAppUser);
+        }
       } else {
         const cur = authService.getSession();
-        if (cur && cur.loginType === 'google') {
+        if (cur && cur.loginType === 'google' && cur.token?.startsWith('fb_tok_') === false && cur.user.firebaseUid) {
           setSession(null);
           setUser(null);
         }
@@ -119,8 +136,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Real Firebase Authentication with Google Sign-In Popup
         const result = await loginWithGoogleFirebase();
         const idToken = await result.credential.user.getIdToken();
-        authService.saveFirebaseSession(result.user, idToken);
-        loggedInUser = result.user;
+        const serverPrefs = await syncFirebaseUserToBackend(idToken);
+        const mergedUser: User = serverPrefs
+          ? {
+              ...result.user,
+              ...saveStoredFirebaseUserPreferences(result.user, serverPrefs)
+            }
+          : result.user;
+        authService.saveFirebaseSession(mergedUser, idToken);
+        loggedInUser = mergedUser;
       }
       const currentSession = authService.getSession();
       setSession(currentSession);
@@ -145,6 +169,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }
   };
+
+  const updateUserPreferences = useCallback(
+    async (prefs: Partial<UserAlertPreferences>): Promise<User | null> => {
+      const updatedUser = await authService.updateUserPreferences(prefs);
+      if (updatedUser) {
+        setUser(updatedUser);
+        const currentSession = authService.getSession();
+        setSession(currentSession);
+      }
+      return updatedUser;
+    },
+    []
+  );
 
   const logout = async () => {
     try {
@@ -182,6 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearAuthNotice,
         loginWithGoogle,
         loginAsGuest,
+        updateUserPreferences,
         logout,
         checkSession
       }}

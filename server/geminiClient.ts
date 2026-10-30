@@ -1,4 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
+import {
+  GoogleGenAI,
+  GenerateContentParameters,
+  GenerateContentResponse,
+} from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -47,7 +51,7 @@ export function getGeminiClient(): GoogleGenAI {
   const apiKey = resolveGeminiApiKey();
   if (!apiKey) {
     const missingKeyError = new Error(
-      "Missing Gemini API Key: GEMINI_API_KEY is not configured or is still set to the placeholder value. Please set GEMINI_API_KEY in your .env file or in the Settings > Secrets panel and restart the server."
+      "Missing Gemini API Key: GEMINI_API_KEY is not configured. Please set GEMINI_API_KEY in your .env file or in the Settings > Secrets panel and restart the server."
     ) as Error & { status?: number; code?: string };
     missingKeyError.status = 401;
     missingKeyError.code = "MISSING_API_KEY";
@@ -70,7 +74,81 @@ export function getGeminiClient(): GoogleGenAI {
 }
 
 /**
- * Normalizes Gemini SDK and network errors into clear, actionable HTTP status codes and messages.
+ * Checks whether an error from the Gemini SDK is a 429 rate-limit / quota error
+ * or a transient model unavailability error (500/502/503/504 UNAVAILABLE) that can be retried on a fallback model.
+ */
+export function isQuotaOrRateLimitError(err: unknown): boolean {
+  const anyErr = err as {
+    status?: number;
+    code?: string | number;
+    message?: string;
+    error?: { code?: number; status?: string; message?: string };
+  };
+  const status = anyErr?.status || anyErr?.error?.code || anyErr?.code;
+  const msg = String(anyErr?.message || anyErr?.error?.message || "");
+  return (
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    msg.includes("429") ||
+    msg.includes("503") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("UNAVAILABLE") ||
+    msg.toLowerCase().includes("exceeded your current quota") ||
+    msg.toLowerCase().includes("high demand")
+  );
+}
+
+/**
+ * Calls ai.models.generateContent with automatic model fallback when a specific model
+ * hits a 429 RESOURCE_EXHAUSTED rate-limit or temporary unavailability (503 UNAVAILABLE).
+ */
+export async function generateContentWithFallback(
+  params: GenerateContentParameters
+): Promise<{ response: GenerateContentResponse; modelUsed: string }> {
+  const ai = getGeminiClient();
+  const primaryModel = params.model || GEMINI_FLASH_MODEL;
+
+  const fallbackOrder = Array.from(
+    new Set([primaryModel, GEMINI_FLASH_MODEL, GEMINI_FLASH_LITE_MODEL])
+  );
+
+  let lastError: unknown = null;
+
+  for (const candidateModel of fallbackOrder) {
+    try {
+      const response = await ai.models.generateContent({
+        ...params,
+        model: candidateModel,
+      });
+      return { response, modelUsed: candidateModel };
+    } catch (err: unknown) {
+      lastError = err;
+      if (isQuotaOrRateLimitError(err)) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Ensures HTTP error status codes never trigger reverse-proxy HTML error page interception
+ * (403, 502, 503, 504 are intercepted by nginx error_page directives and turned into HTML).
+ */
+function sanitizeHttpStatusForJsonApi(status: number): number {
+  if (status === 403) return 401;
+  if (status === 502 || status === 503 || status === 504) return 500;
+  if (status >= 400 && status < 600) return status;
+  return 500;
+}
+
+/**
+ * Normalizes Gemini SDK and network errors into clear, actionable HTTP status codes and JSON messages.
  */
 export function formatGeminiError(
   err: unknown,
@@ -113,7 +191,7 @@ export function formatGeminiError(
     rawMessage.includes("Invalid response received from Gemini")
   ) {
     return {
-      status: 502,
+      status: 500,
       code: "INVALID_GEMINI_RESPONSE",
       message: rawMessage,
     };
@@ -134,9 +212,9 @@ export function formatGeminiError(
 
   if (statusFromErr === 401 || statusFromErr === 403) {
     return {
-      status: statusFromErr,
+      status: 401,
       code: "PERMISSION_DENIED",
-      message: `Gemini API authentication/permission error (${statusFromErr}): ${rawMessage}`,
+      message: `Gemini API authentication/permission error: ${rawMessage}`,
     };
   }
 
@@ -148,17 +226,17 @@ export function formatGeminiError(
     };
   }
 
-  if (statusFromErr === 429 || rawMessage.includes("RESOURCE_EXHAUSTED")) {
+  if (isQuotaOrRateLimitError(err)) {
     return {
       status: 429,
       code: "RATE_LIMIT_EXCEEDED",
       message:
-        "Gemini API rate limit or quota exceeded (429 RESOURCE_EXHAUSTED). Please wait a moment and try again.",
+        "Gemini API rate limit or quota exceeded (429 RESOURCE_EXHAUSTED). Please wait a moment or check your Gemini API plan/quota.",
     };
   }
 
   return {
-    status: statusFromErr >= 400 && statusFromErr < 600 ? statusFromErr : 500,
+    status: sanitizeHttpStatusForJsonApi(statusFromErr),
     code: anyErr?.code || "GEMINI_REQUEST_FAILED",
     message: `Gemini request failed: ${rawMessage}`,
   };

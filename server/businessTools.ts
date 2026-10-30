@@ -1,9 +1,10 @@
 import { FunctionDeclaration, Type } from "@google/genai";
 import {
-  getGeminiClient,
   GEMINI_FLASH_MODEL,
   ALLOWED_GEMINI_MODELS,
   SupportedGeminiModel,
+  generateContentWithFallback,
+  isQuotaOrRateLimitError,
 } from "./geminiClient.ts";
 import {
   MOCK_CONTRACTS,
@@ -734,7 +735,6 @@ export async function runBusinessAgentWithTools(params: {
   groundingSources?: GroundingSource[];
   searchQueries?: string[];
 }> {
-  const ai = getGeminiClient();
   const toolCalls: ToolExecutionRecord[] = [];
   const clientActions: ClientSideAction[] = [];
   const groundingSources: GroundingSource[] = [];
@@ -776,7 +776,7 @@ export async function runBusinessAgentWithTools(params: {
 
     const groundedSystemInstruction = `${baseInstruction}\n\nYou have live Google Search Grounding enabled. Use Google Search to retrieve up-to-date, accurate regulatory, security, financial, and counterparty news relevant to the user's question and our active contract portfolio (${contractsSummary}). Cite concrete facts and dates.`;
 
-    const response = await ai.models.generateContent({
+    const { response, modelUsed } = await generateContentWithFallback({
       model: GEMINI_FLASH_MODEL,
       contents: contents as any,
       config: {
@@ -793,7 +793,7 @@ export async function runBusinessAgentWithTools(params: {
       const invalidErr = new Error(
         "Invalid response received from Gemini Search Grounding: No candidates returned."
       ) as Error & { status?: number; code?: string };
-      invalidErr.status = 502;
+      invalidErr.status = 500;
       invalidErr.code = "INVALID_GEMINI_RESPONSE";
       throw invalidErr;
     }
@@ -838,7 +838,7 @@ export async function runBusinessAgentWithTools(params: {
         "Search recent Stripe and Cloudflare SLA security advisories",
         "Look up GDPR cross-border data transfer updates for Snowflake DPA",
       ],
-      modelUsed: GEMINI_FLASH_MODEL,
+      modelUsed,
       groundingSources,
       searchQueries,
     };
@@ -857,24 +857,48 @@ export async function runBusinessAgentWithTools(params: {
 
   let maxTurns = 4;
   let finalReply = "";
+  let actualModelUsed: string = selectedModel;
 
   while (maxTurns > 0) {
     maxTurns--;
 
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents: contents as any,
-      config: {
-        systemInstruction: modeInstruction,
-        tools: [{ functionDeclarations: BUSINESS_TOOL_DECLARATIONS }],
-      },
-    });
+    let response;
+    try {
+      const result = await generateContentWithFallback({
+        model: actualModelUsed,
+        contents: contents as any,
+        config: {
+          systemInstruction: modeInstruction,
+          tools: [{ functionDeclarations: BUSINESS_TOOL_DECLARATIONS }],
+        },
+      });
+      response = result.response;
+      actualModelUsed = result.modelUsed;
+    } catch (err: unknown) {
+      // If a rate limit occurs after tools were already executed, synthesize the tool results directly
+      if (isQuotaOrRateLimitError(err) && toolCalls.length > 0) {
+        finalReply = toolCalls
+          .map(
+            (tc) =>
+              `Executed **${tc.name}**: ${
+                typeof tc.result?.summary === "string"
+                  ? tc.result.summary
+                  : typeof tc.result?.message === "string"
+                  ? tc.result.message
+                  : JSON.stringify(tc.result)
+              }`
+          )
+          .join("\n\n");
+        break;
+      }
+      throw err;
+    }
 
     if (!response || !Array.isArray(response.candidates) || response.candidates.length === 0) {
       const invalidErr = new Error(
         "Invalid response received from Gemini API: No response candidates were returned by the model."
       ) as Error & { status?: number; code?: string };
-      invalidErr.status = 502;
+      invalidErr.status = 500;
       invalidErr.code = "INVALID_GEMINI_RESPONSE";
       throw invalidErr;
     }
@@ -888,7 +912,7 @@ export async function runBusinessAgentWithTools(params: {
         const emptyErr = new Error(
           "Invalid response received from Gemini API: The model returned neither text output nor tool calls."
         ) as Error & { status?: number; code?: string };
-        emptyErr.status = 502;
+        emptyErr.status = 500;
         emptyErr.code = "INVALID_GEMINI_RESPONSE";
         throw emptyErr;
       }
@@ -951,7 +975,7 @@ export async function runBusinessAgentWithTools(params: {
     toolCalls,
     clientActions,
     suggestedFollowUps,
-    modelUsed: selectedModel,
+    modelUsed: actualModelUsed,
     groundingSources,
     searchQueries,
   };
@@ -966,7 +990,7 @@ function parseStructuredGeminiJson<T>(rawText: string | undefined, context: stri
     const emptyErr = new Error(
       `Invalid response received from Gemini (${context}): Model returned an empty response body.`
     ) as Error & { status?: number; code?: string };
-    emptyErr.status = 502;
+    emptyErr.status = 500;
     emptyErr.code = "INVALID_GEMINI_RESPONSE";
     throw emptyErr;
   }
@@ -985,7 +1009,7 @@ function parseStructuredGeminiJson<T>(rawText: string | undefined, context: stri
     const nonJsonErr = new Error(
       `Invalid response received from Gemini (${context}): Expected structured JSON output, but received plain text.`
     ) as Error & { status?: number; code?: string };
-    nonJsonErr.status = 502;
+    nonJsonErr.status = 500;
     nonJsonErr.code = "INVALID_GEMINI_RESPONSE";
     throw nonJsonErr;
   }
@@ -996,7 +1020,7 @@ function parseStructuredGeminiJson<T>(rawText: string | undefined, context: stri
     const malformedErr = new Error(
       `Invalid response received from Gemini (${context}): Failed to parse JSON output (${parseErr?.message || "SyntaxError"}).`
     ) as Error & { status?: number; code?: string };
-    malformedErr.status = 502;
+    malformedErr.status = 500;
     malformedErr.code = "INVALID_GEMINI_RESPONSE";
     throw malformedErr;
   }
@@ -1023,8 +1047,6 @@ export async function extractObligationsFromText(params: {
     cadence: string;
   }>;
 }> {
-  const ai = getGeminiClient();
-
   const prompt = `Extract all actionable business and legal obligations from the following contract text.
 Contract Name: ${params.contractName}
 Counterparty: ${params.counterparty || "Counterparty"}
@@ -1034,7 +1056,7 @@ Contract Text:
 ${params.contractText}
 """`;
 
-  const response = await ai.models.generateContent({
+  const { response } = await generateContentWithFallback({
     model: GEMINI_FLASH_MODEL,
     contents: prompt,
     config: {
@@ -1116,7 +1138,7 @@ ${params.contractText}
     const noCandidateErr = new Error(
       "Invalid response received from Gemini (Contract Extraction): No candidates returned."
     ) as Error & { status?: number; code?: string };
-    noCandidateErr.status = 502;
+    noCandidateErr.status = 500;
     noCandidateErr.code = "INVALID_GEMINI_RESPONSE";
     throw noCandidateErr;
   }
@@ -1136,7 +1158,7 @@ ${params.contractText}
     const schemaErr = new Error(
       "Invalid response received from Gemini (Contract Obligation Extraction): Response JSON did not match the required extraction schema."
     ) as Error & { status?: number; code?: string };
-    schemaErr.status = 502;
+    schemaErr.status = 500;
     schemaErr.code = "INVALID_GEMINI_RESPONSE";
     throw schemaErr;
   }
@@ -1157,5 +1179,158 @@ ${params.contractText}
       category: ObligationCategory;
       cadence: string;
     }>,
+  };
+}
+
+export interface BusinessInsightItem {
+  title: string;
+  category: string;
+  impact: "High" | "Medium" | "Low";
+  recommendation: string;
+}
+
+/**
+ * Generates executive business insights across the Busitech contract & obligation portfolio
+ * using Gemini structured JSON schema output.
+ */
+export async function generateBusinessInsights(params?: {
+  focusArea?: string;
+  prompt?: string;
+  snapshot?: WorkspaceSnapshot;
+}): Promise<{
+  summary: string;
+  portfolioHealthScore: number;
+  insights: BusinessInsightItem[];
+  priorityActions: string[];
+  modelUsed: string;
+}> {
+  const contracts = params?.snapshot?.contracts?.length
+    ? params.snapshot.contracts
+    : MOCK_CONTRACTS;
+  const obligations = params?.snapshot?.obligations?.length
+    ? params.snapshot.obligations
+    : MOCK_OBLIGATIONS;
+  const approvals = params?.snapshot?.approvals?.length
+    ? params.snapshot.approvals
+    : MOCK_APPROVALS;
+
+  const focusArea = (params?.focusArea || params?.prompt || "overall portfolio governance").trim();
+
+  const portfolioContext = {
+    focusArea,
+    contractsCount: contracts.length,
+    riskyContracts: contracts
+      .filter((c) => c.hasRisk)
+      .map((c) => ({
+        name: c.name,
+        counterparty: c.counterparty,
+        riskCount: c.riskCount,
+        nextDeadline: c.nextDeadlineToDisplay,
+      })),
+    highRiskOrOverdueObligations: obligations
+      .filter((o) => o.risk === "High" || o.status === "Overdue")
+      .map((o) => ({
+        title: o.title,
+        contractName: o.contractName,
+        clauseRef: o.clauseRef,
+        owner: o.ownerName,
+        dueDate: o.dueDate,
+        status: o.status,
+        risk: o.risk,
+      })),
+    pendingApprovals: approvals
+      .filter((a) => a.status === "Pending")
+      .map((a) => ({
+        title: a.title,
+        contractRef: a.contractRef,
+        clauseRef: a.clauseRef,
+        riskLevel: a.riskLevel,
+        dueDateTag: a.dueDateTag,
+      })),
+  };
+
+  const { response, modelUsed } = await generateContentWithFallback({
+    model: GEMINI_FLASH_MODEL,
+    contents: `Generate executive business insights and strategic recommendations for our Busitech contract governance portfolio.
+Focus Area: ${focusArea}
+Portfolio Data: ${JSON.stringify(portfolioContext)}`,
+    config: {
+      systemInstruction:
+        "You are the Chief Legal & Business Intelligence Strategist for Busitech Contract2Action AI. Produce concise, data-backed executive insights, a portfolio health score (0-100), and concrete priority actions.",
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          summary: {
+            type: Type.STRING,
+            description: "Executive overview of portfolio health and key exposures.",
+          },
+          portfolioHealthScore: {
+            type: Type.INTEGER,
+            description: "Overall portfolio health score from 0 to 100.",
+          },
+          insights: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                category: { type: Type.STRING },
+                impact: {
+                  type: Type.STRING,
+                  description: "Must be 'High', 'Medium', or 'Low'.",
+                },
+                recommendation: { type: Type.STRING },
+              },
+              required: ["title", "category", "impact", "recommendation"],
+            },
+          },
+          priorityActions: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+          },
+        },
+        required: [
+          "summary",
+          "portfolioHealthScore",
+          "insights",
+          "priorityActions",
+        ],
+      },
+    },
+  });
+
+  if (!response || !Array.isArray(response.candidates) || response.candidates.length === 0) {
+    const noCandidateErr = new Error(
+      "Invalid response received from Gemini (Business Insights): No candidates returned."
+    ) as Error & { status?: number; code?: string };
+    noCandidateErr.status = 500;
+    noCandidateErr.code = "INVALID_GEMINI_RESPONSE";
+    throw noCandidateErr;
+  }
+
+  const parsed = parseStructuredGeminiJson<{
+    summary?: unknown;
+    portfolioHealthScore?: unknown;
+    insights?: unknown;
+    priorityActions?: unknown;
+  }>(response.text, "Business Insights");
+
+  return {
+    summary:
+      typeof parsed.summary === "string"
+        ? parsed.summary
+        : "Portfolio insights generated.",
+    portfolioHealthScore:
+      typeof parsed.portfolioHealthScore === "number"
+        ? Math.max(0, Math.min(100, Math.round(parsed.portfolioHealthScore)))
+        : 88,
+    insights: Array.isArray(parsed.insights)
+      ? (parsed.insights as BusinessInsightItem[])
+      : [],
+    priorityActions: Array.isArray(parsed.priorityActions)
+      ? (parsed.priorityActions as string[])
+      : [],
+    modelUsed,
   };
 }

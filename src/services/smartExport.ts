@@ -6,6 +6,21 @@ import {
   RISK_DISTRIBUTION_DATA
 } from '../data/mockData';
 import { Contract, Obligation, ApprovalItem } from '../types';
+import {
+  ContractSummaryMetadata,
+  buildContractMetadataPayload
+} from './contractCache';
+import {
+  downloadContractsFromState,
+  convertContractsToCSVString,
+  triggerCSVBrowserDownload
+} from '../utils/csvExport';
+
+export {
+  downloadContractsFromState,
+  convertContractsToCSVString,
+  triggerCSVBrowserDownload
+};
 
 export interface SmartExportOptions {
   format: 'pdf' | 'csv';
@@ -19,12 +34,47 @@ export interface SmartExportOptions {
   reportTitle?: string;
 }
 
+export interface ContractsCsvExportOptions {
+  contracts?: Contract[];
+  summaries?: Record<string, ContractSummaryMetadata>;
+  fileNamePrefix?: string;
+  cacheSource?: string;
+  syncedAt?: string;
+  filterDescription?: string;
+}
+
 function escapeCsvCell(value: unknown): string {
   const str = String(value ?? '').replace(/\r?\n/g, ' ').trim();
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
+}
+
+/**
+ * Exports the contracts list (filtered or full registry) as an offline-ready UTF-8 CSV file
+ * enriched with cached executive summaries, governing law, renewal terms, key clauses, and obligations preview.
+ */
+export function exportContractsListToCSV(
+  options: ContractsCsvExportOptions = {}
+): { fileName: string; rowCount: number; csvString: string } {
+  const fallbackPayload = buildContractMetadataPayload(
+    MOCK_CONTRACTS,
+    MOCK_OBLIGATIONS,
+    'local-storage'
+  );
+
+  const contractsList =
+    options.contracts !== undefined
+      ? options.contracts
+      : fallbackPayload.contracts;
+  const summariesMap = options.summaries || fallbackPayload.summaries;
+
+  return downloadContractsFromState(contractsList, summariesMap, {
+    fileNamePrefix: options.fileNamePrefix || 'contracts_offline_report',
+    cacheSource: options.cacheSource || fallbackPayload.source || 'offline-cache',
+    syncedAt: options.syncedAt || fallbackPayload.syncedAt
+  });
 }
 
 /**

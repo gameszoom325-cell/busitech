@@ -11,12 +11,16 @@ import {
   RefreshCw,
   Eye,
   CheckCircle2,
+  Calendar,
+  X,
+  RotateCcw,
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import { SmartExportButton } from "../components/modals/SmartExportModal";
 import { useContractCache } from "../hooks/useContractCache";
 import { ContractSummaryMetadata } from "../services/contractCache";
 import { ContractSummaryModal } from "../components/modals/ContractSummaryModal";
+import { Contract } from "../types";
 
 export const ContractsListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -33,10 +37,13 @@ export const ContractsListPage: React.FC = () => {
     swRegistered,
     syncContractCache,
     toggleSimulatedOffline,
+    downloadContractsCSV,
   } = useContractCache();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("All");
+  const [exactDateInput, setExactDateInput] = useState("");
   const [counterpartyFilter, setCounterpartyFilter] = useState("All");
   const [selectedSummary, setSelectedSummary] =
     useState<ContractSummaryMetadata | null>(null);
@@ -45,57 +52,150 @@ export const ContractsListPage: React.FC = () => {
     new Set(contracts.map((c) => c.counterparty))
   );
 
+  const uniqueDeadlines = Array.from(
+    new Set(contracts.map((c) => c.nextDeadlineToDisplay).filter(Boolean))
+  );
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    statusFilter !== "All" ||
+    dateFilter !== "All" ||
+    exactDateInput.trim() !== "" ||
+    counterpartyFilter !== "All";
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("All");
+    setDateFilter("All");
+    setExactDateInput("");
+    setCounterpartyFilter("All");
+  };
+
   const filteredContracts = contracts.filter((c) => {
+    // 1. Status dropdown / pill filter
     if (statusFilter !== "All" && c.status !== statusFilter) return false;
+
+    // 2. Counterparty filter
     if (counterpartyFilter !== "All" && c.counterparty !== counterpartyFilter)
       return false;
+
+    // 3. Date preset / deadline filter
+    if (dateFilter !== "All") {
+      const deadlineDisplay = (c.nextDeadlineToDisplay || "").toLowerCase();
+      const deadlineIso = (c.nextDeadline || "").toLowerCase();
+      const uploadedDate = (
+        c.uploadedDate ||
+        summaries[c.id]?.uploadedAt ||
+        ""
+      ).toLowerCase();
+
+      if (dateFilter === "OCT_2025") {
+        if (
+          !deadlineDisplay.includes("oct") &&
+          !deadlineIso.startsWith("2025-10")
+        )
+          return false;
+      } else if (dateFilter === "NOV_2025") {
+        if (
+          !deadlineDisplay.includes("nov") &&
+          !deadlineIso.startsWith("2025-11")
+        )
+          return false;
+      } else if (dateFilter === "DEC_2025") {
+        if (
+          !deadlineDisplay.includes("dec") &&
+          !deadlineIso.startsWith("2025-12")
+        )
+          return false;
+      } else if (
+        c.nextDeadlineToDisplay !== dateFilter &&
+        c.nextDeadline !== dateFilter &&
+        !uploadedDate.includes(dateFilter.toLowerCase())
+      ) {
+        return false;
+      }
+    }
+
+    // 4. Exact calendar date picker filter (YYYY-MM-DD)
+    if (exactDateInput.trim()) {
+      const targetIso = exactDateInput.trim();
+      const matchesIsoDeadline = c.nextDeadline === targetIso;
+      const matchesUploaded =
+        (c.uploadedDate || summaries[c.id]?.uploadedAt || "") === targetIso;
+
+      // Also compare formatted date (e.g. 2025-10-24 -> Oct 24, 2025)
+      let formattedTarget = "";
+      try {
+        const [y, m, d] = targetIso.split("-").map(Number);
+        if (y && m && d) {
+          const dt = new Date(y, m - 1, d);
+          formattedTarget = dt
+            .toLocaleDateString("en-US", {
+              month: "short",
+              day: "2-digit",
+              year: "numeric",
+            })
+            .toLowerCase();
+        }
+      } catch {
+        // ignore
+      }
+
+      const matchesFormatted =
+        formattedTarget &&
+        c.nextDeadlineToDisplay.toLowerCase().includes(formattedTarget);
+
+      if (!matchesIsoDeadline && !matchesUploaded && !matchesFormatted) {
+        return false;
+      }
+    }
+
+    // 5. Top Search Bar query (matches Name, Status, or Date, plus code/counterparty/summary)
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       const summaryText =
         summaries[c.id]?.executiveSummary?.toLowerCase() || "";
+      const uploadedAt = (
+        c.uploadedDate ||
+        summaries[c.id]?.uploadedAt ||
+        ""
+      ).toLowerCase();
+
       return (
         c.name.toLowerCase().includes(q) ||
+        c.status.toLowerCase().includes(q) ||
+        c.nextDeadlineToDisplay.toLowerCase().includes(q) ||
+        c.nextDeadline.toLowerCase().includes(q) ||
+        uploadedAt.includes(q) ||
         c.counterparty.toLowerCase().includes(q) ||
         c.code.toLowerCase().includes(q) ||
         c.type.toLowerCase().includes(q) ||
         summaryText.includes(q)
       );
     }
+
     return true;
   });
 
-  const handleExportCSV = () => {
-    const headers = [
-      "Contract Name",
-      "ID",
-      "Counterparty",
-      "Type",
-      "Obligations",
-      "Next Deadline",
-      "Status",
-      "Executive Summary",
-    ];
-    const rows = filteredContracts.map((c) => [
-      `"${c.name}"`,
-      `"${c.code}"`,
-      `"${c.counterparty}"`,
-      `"${c.type}"`,
-      c.obligationsCount,
-      c.nextDeadlineToDisplay,
-      c.status,
-      `"${(summaries[c.id]?.executiveSummary || "").replace(/"/g, '""')}"`,
-    ]);
-    const csv =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csv);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "contracts_registry.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("Contracts registry exported to CSV", "success");
+  const handleExportCSV = (
+    targetContracts?: Contract[],
+    customPrefix?: string
+  ) => {
+    const listToExport = targetContracts ?? filteredContracts;
+    if (listToExport.length === 0) {
+      showToast("No contracts match the current filter to export", "warning");
+      return;
+    }
+
+    const { fileName, rowCount } = downloadContractsCSV(
+      listToExport,
+      customPrefix || "contracts_offline_report"
+    );
+
+    showToast(
+      `Exported ${rowCount} contract${rowCount === 1 ? "" : "s"} to ${fileName}`,
+      "success"
+    );
   };
 
   const handleSyncCache = async () => {
@@ -166,11 +266,15 @@ export const ContractsListPage: React.FC = () => {
             />
 
             <button
-              onClick={handleExportCSV}
+              type="button"
+              onClick={() => handleExportCSV(filteredContracts)}
               className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-main)] transition-colors shadow-xs min-h-[40px] sm:min-h-[36px] cursor-pointer"
+              title="Download filtered contracts list with cached summaries & clauses as an offline CSV report"
             >
-              <Download className="w-3.5 h-3.5 shrink-0" />
-              <span className="whitespace-nowrap">Export CSV</span>
+              <Download className="w-3.5 h-3.5 shrink-0 text-[var(--color-success)]" />
+              <span className="whitespace-nowrap">
+                Export CSV ({filteredContracts.length})
+              </span>
             </button>
 
             <button
@@ -181,6 +285,136 @@ export const ContractsListPage: React.FC = () => {
               <span className="whitespace-nowrap">Upload Contract</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* TOP SEARCH & FILTER BAR (Filter by Name, Status, or Date) */}
+      <div className="p-3.5 sm:p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-[var(--shadow-card)] space-y-3">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+          {/* Primary Search Input (Name, Status, or Date) */}
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-primary)] shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search contracts by name (e.g. Stripe MSA), status (Active, Pending Review), or date (Oct 24, 2025)..."
+              aria-label="Search contracts by name, status, or date"
+              className="w-full pl-10 pr-9 py-2.5 text-xs sm:text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] text-[var(--color-text-main)] placeholder-[var(--color-text-subtle)] focus:outline-hidden focus:border-[var(--color-primary)] min-h-[40px]"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="p-1 rounded-md absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-subtle)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                aria-label="Clear search query"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Dedicated Status, Date & Counterparty Filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by contract status"
+              className="px-3 py-2 text-xs font-medium rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-primary)] min-h-[40px] flex-1 sm:flex-initial"
+            >
+              <option value="All">Status: All</option>
+              <option value="Active">Status: Active</option>
+              <option value="Pending Review">Status: Pending Review</option>
+              <option value="Archived">Status: Archived</option>
+            </select>
+
+            {/* Date / Deadline Filter */}
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              aria-label="Filter by deadline period or date"
+              className="px-3 py-2 text-xs font-medium rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-primary)] min-h-[40px] flex-1 sm:flex-initial"
+            >
+              <option value="All">Date: All Deadlines</option>
+              <option value="OCT_2025">Month: Oct 2025</option>
+              <option value="NOV_2025">Month: Nov 2025</option>
+              <option value="DEC_2025">Month: Dec 2025</option>
+              {uniqueDeadlines.map((dl) => (
+                <option key={dl} value={dl}>
+                  Deadline: {dl}
+                </option>
+              ))}
+            </select>
+
+            {/* Exact Date Picker */}
+            <div className="relative flex items-center flex-1 sm:flex-initial">
+              <Calendar className="w-3.5 h-3.5 absolute left-2.5 text-[var(--color-text-subtle)] pointer-events-none" />
+              <input
+                type="date"
+                value={exactDateInput}
+                onChange={(e) => setExactDateInput(e.target.value)}
+                aria-label="Filter by exact date"
+                className="pl-8 pr-2.5 py-2 text-xs font-medium rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-primary)] min-h-[40px] w-full sm:w-auto"
+              />
+            </div>
+
+            {/* Counterparty Filter */}
+            <select
+              value={counterpartyFilter}
+              onChange={(e) => setCounterpartyFilter(e.target.value)}
+              aria-label="Filter by counterparty"
+              className="px-3 py-2 text-xs font-medium rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[var(--color-text-main)] focus:outline-hidden focus:border-[var(--color-primary)] min-h-[40px] flex-1 sm:flex-initial"
+            >
+              <option value="All">All Counterparties</option>
+              {counterparties.map((cp) => (
+                <option key={cp} value={cp}>
+                  {cp}
+                </option>
+              ))}
+            </select>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] transition-colors min-h-[40px] cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Status Filter Pills & Match Summary */}
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-[var(--color-border-subtle)] text-xs">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-semibold text-[var(--color-text-subtle)] mr-1">
+              Quick Filter:
+            </span>
+            {(["All", "Active", "Pending Review", "Archived"] as const).map(
+              (st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                    statusFilter === st
+                      ? "bg-[var(--color-primary)] text-white"
+                      : "bg-[var(--color-bg-card-subtle)] text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] border border-[var(--color-border-subtle)]"
+                  }`}
+                >
+                  {st}
+                </button>
+              )
+            )}
+          </div>
+
+          <span className="text-[11px] font-mono text-[var(--color-text-muted)]">
+            Showing <strong>{filteredContracts.length}</strong> of{" "}
+            <strong>{contracts.length}</strong> contracts
+          </span>
         </div>
       </div>
 
@@ -261,46 +495,6 @@ export const ContractsListPage: React.FC = () => {
                 : "Simulate Offline Mode"}
             </span>
           </button>
-        </div>
-      </div>
-
-      {/* Filter Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-subtle)] shrink-0" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search contracts or cached summaries by name, code or vendor..."
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] text-[var(--color-text-main)] placeholder-[var(--color-text-subtle)] focus:outline-hidden focus:border-[var(--color-primary)] min-h-[40px] sm:min-h-[36px]"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={counterpartyFilter}
-            onChange={(e) => setCounterpartyFilter(e.target.value)}
-            className="px-3 py-2 text-xs font-medium rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-main)] focus:outline-hidden min-h-[40px] sm:min-h-[36px] flex-1 sm:flex-initial"
-          >
-            <option value="All">All Counterparties</option>
-            {counterparties.map((cp) => (
-              <option key={cp} value={cp}>
-                {cp}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 text-xs font-medium rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-main)] focus:outline-hidden min-h-[40px] sm:min-h-[36px] flex-1 sm:flex-initial"
-          >
-            <option value="All">All Statuses</option>
-            <option value="Active">Active</option>
-            <option value="Pending Review">Pending Review</option>
-            <option value="Archived">Archived</option>
-          </select>
         </div>
       </div>
 
@@ -418,6 +612,19 @@ export const ContractsListPage: React.FC = () => {
                               <span>Summary</span>
                             </button>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExportCSV([c], `contract_${c.code.toLowerCase()}`);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] hover:bg-[var(--color-bg-hover)] text-[11px] font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] transition-colors cursor-pointer"
+                            title={`Export ${c.name} as CSV`}
+                          >
+                            <Download className="w-3 h-3 shrink-0" />
+                            <span>CSV</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -471,19 +678,32 @@ export const ContractsListPage: React.FC = () => {
                     {c.obligationsCount} obligations • Next:{" "}
                     {c.nextDeadlineToDisplay}
                   </span>
-                  {summaryMeta && (
+                  <div className="flex items-center gap-1.5">
+                    {summaryMeta && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSummary(summaryMeta);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[11px] font-semibold text-[var(--color-primary-text)]"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>Summary</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedSummary(summaryMeta);
+                        handleExportCSV([c], `contract_${c.code.toLowerCase()}`);
                       }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[11px] font-semibold text-[var(--color-primary-text)]"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] text-[11px] font-semibold text-[var(--color-text-main)]"
                     >
-                      <Eye className="w-3 h-3" />
-                      <span>Summary</span>
+                      <Download className="w-3 h-3" />
+                      <span>CSV</span>
                     </button>
-                  )}
+                  </div>
                 </div>
               </div>
             );
@@ -491,13 +711,30 @@ export const ContractsListPage: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="px-4 sm:px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+        <div className="px-4 sm:px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-[var(--color-text-muted)]">
           <span>
-            {filteredContracts.length} agreements ({cacheSource} cache ready)
+            Showing {filteredContracts.length} of {contracts.length} agreements ({cacheSource} cache ready for offline CSV reporting)
           </span>
-          <span className="truncate ml-2">
-            Click &ldquo;Summary&rdquo; for offline overview or row for clause analysis
-          </span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleExportCSV(filteredContracts)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-primary-text)] hover:underline cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Offline CSV ({filteredContracts.length})</span>
+            </button>
+            {filteredContracts.length !== contracts.length && (
+              <button
+                type="button"
+                onClick={() => handleExportCSV(contracts, "contracts_full_registry")}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-text-main)] hover:underline cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export All ({contracts.length})</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

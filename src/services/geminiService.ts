@@ -185,8 +185,23 @@ export function applyClientSideActions(
   }
 }
 
+export interface BusinessInsightItem {
+  title: string;
+  category: string;
+  impact: "High" | "Medium" | "Low";
+  recommendation: string;
+}
+
+export interface GeminiInsightsResponse {
+  summary: string;
+  portfolioHealthScore: number;
+  insights: BusinessInsightItem[];
+  priorityActions: string[];
+  modelUsed?: string;
+}
+
 /**
- * Safely reads and validates an HTTP response from the backend Gemini endpoints.
+ * Safely reads and validates an HTTP response from the backend AI endpoints.
  * Never calls JSON.parse() on plain text or HTML responses without validation.
  */
 async function parseApiJsonResponse<T>(
@@ -203,13 +218,21 @@ async function parseApiJsonResponse<T>(
     );
   }
 
+  // Detect HTML error/warmup pages (e.g. from reverse proxies) before attempting JSON.parse
+  const lowerPrefix = trimmed.slice(0, 60).toLowerCase();
+  if (lowerPrefix.startsWith("<!doctype") || lowerPrefix.startsWith("<html")) {
+    throw new Error(
+      `Temporary backend gateway response (${endpointName}, HTTP ${res.status}). Please retry your request in a moment.`
+    );
+  }
+
   const looksLikeJson =
     contentType.includes("application/json") ||
     trimmed.startsWith("{") ||
     trimmed.startsWith("[");
 
   if (!looksLikeJson) {
-    // Plain text or HTML response — do not pass to JSON.parse()
+    // Plain text response — do not pass to JSON.parse()
     if (!res.ok) {
       throw new Error(
         `Gemini request failed (${endpointName}, HTTP ${res.status}): ${trimmed.slice(0, 240)}`
@@ -248,15 +271,15 @@ async function parseApiJsonResponse<T>(
 
 export const geminiService = {
   /**
-   * Checks server-side Gemini connection status and registered tools.
+   * Checks server-side Gemini connection status and registered tools via GET /api/ai/status.
    */
   async getStatus(): Promise<GeminiStatusResponse> {
-    const res = await fetch("/api/gemini/status");
+    const res = await fetch("/api/ai/status");
     return parseApiJsonResponse<GeminiStatusResponse>(res, "Gemini Status");
   },
 
   /**
-   * Sends a single-turn natural language command from the AI Command Bar (⌘K).
+   * Sends a single-turn natural language command from the AI Command Bar (⌘K) to POST /api/ai/chat.
    */
   async executeCommand(
     prompt: string,
@@ -266,11 +289,12 @@ export const geminiService = {
       throw new Error("Please enter a command before submitting to Gemini.");
     }
 
-    const res = await fetch("/api/gemini/command", {
+    const res = await fetch("/api/ai/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: prompt.trim(),
+        mode: "command",
         snapshot: {
           contracts: MOCK_CONTRACTS,
           obligations: MOCK_OBLIGATIONS,
@@ -281,7 +305,7 @@ export const geminiService = {
 
     const data = await parseApiJsonResponse<GeminiAgentResponse>(
       res,
-      "AI Command Bar"
+      "AI Command Bar (/api/ai/chat)"
     );
 
     if (typeof data.reply !== "string") {
@@ -295,8 +319,8 @@ export const geminiService = {
   },
 
   /**
-   * Sends a multi-turn message to the Busitech AI Business Agent with tool-calling,
-   * selectable Gemini model tier, role persona, and live Google Search Grounding support.
+   * Sends a multi-turn message to the Busitech AI Business Agent via POST /api/ai/chat
+   * with tool-calling, selectable Gemini model tier, role persona, and live Google Search Grounding.
    */
   async sendAgentMessage(
     prompt: string,
@@ -312,12 +336,13 @@ export const geminiService = {
       throw new Error("Please enter a message for the AI Business Agent.");
     }
 
-    const res = await fetch("/api/gemini/agent", {
+    const res = await fetch("/api/ai/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: prompt.trim(),
         history,
+        mode: "agent",
         model: options?.model,
         rolePersona: options?.rolePersona,
         useSearchGrounding: Boolean(options?.useSearchGrounding),
@@ -331,7 +356,7 @@ export const geminiService = {
 
     const data = await parseApiJsonResponse<GeminiAgentResponse>(
       res,
-      "AI Business Agent"
+      "AI Business Agent (/api/ai/chat)"
     );
 
     if (typeof data.reply !== "string") {
@@ -345,7 +370,7 @@ export const geminiService = {
   },
 
   /**
-   * Extracts structured obligations from raw contract text via Gemini JSON responseSchema.
+   * Extracts structured obligations from raw contract text via POST /api/ai/analyze.
    */
   async extractContractObligations(params: {
     contractName: string;
@@ -356,7 +381,7 @@ export const geminiService = {
       throw new Error("Please provide contract text before running extraction.");
     }
 
-    const res = await fetch("/api/gemini/extract", {
+    const res = await fetch("/api/ai/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
@@ -364,7 +389,7 @@ export const geminiService = {
 
     const data = await parseApiJsonResponse<GeminiExtractionResponse>(
       res,
-      "Contract Obligation Extractor"
+      "Contract Analyzer (/api/ai/analyze)"
     );
 
     if (
@@ -377,5 +402,28 @@ export const geminiService = {
     }
 
     return data;
+  },
+
+  /**
+   * Generates executive business insights across the contract portfolio via POST /api/ai/insights.
+   */
+  async getBusinessInsights(focusArea?: string): Promise<GeminiInsightsResponse> {
+    const res = await fetch("/api/ai/insights", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        focusArea: focusArea || "overall portfolio governance",
+        snapshot: {
+          contracts: MOCK_CONTRACTS,
+          obligations: MOCK_OBLIGATIONS,
+          approvals: MOCK_APPROVALS,
+        },
+      }),
+    });
+
+    return parseApiJsonResponse<GeminiInsightsResponse>(
+      res,
+      "Business Insights (/api/ai/insights)"
+    );
   },
 };

@@ -2,7 +2,7 @@ import { MOCK_CONTRACTS, MOCK_OBLIGATIONS } from "../data/mockData";
 import { Contract, Obligation } from "../types";
 
 export const CONTRACT_CACHE_STORAGE_KEY = "c2a_contract_metadata_cache_v1";
-export const CONTRACT_SW_CACHE_NAME = "c2a-contract-metadata-v1";
+export const CONTRACT_SW_CACHE_NAME = "c2a-contract-metadata-v2";
 export const SIMULATED_OFFLINE_KEY = "c2a_simulated_offline_mode";
 
 export interface ContractSummaryMetadata {

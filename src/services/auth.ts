@@ -1,8 +1,12 @@
-import { User, GuestRegistration, UserRole } from '../types';
+import { User, GuestRegistration, UserRole, UserAlertPreferences } from '../types';
 import { isAdminEmail } from '../config/admins';
 import { MOCK_GUESTS, MOCK_ACTIVITY_LOGS } from '../data/mockData';
 import { GoogleOAuthUser } from './googleAuth';
-import { logoutFirebase } from './firebaseAuth';
+import {
+  logoutFirebase,
+  getStoredFirebaseUserPreferences,
+  syncUserPreferencesToBackend
+} from './firebaseAuth';
 
 const AUTH_SESSION_KEY = 'c2a-auth-session';
 const SESSION_EXPIRED_KEY = 'c2a-session-expired-notice';
@@ -67,6 +71,24 @@ export const authService = {
           return null;
         }
 
+        if (session.user) {
+          const savedPrefs = getStoredFirebaseUserPreferences(
+            session.user.firebaseUid || session.user.id || session.user.email
+          );
+          session.user = {
+            ...savedPrefs,
+            ...session.user,
+            emailAlertsEnabled:
+              session.user.emailAlertsEnabled ?? savedPrefs.emailAlertsEnabled,
+            deadlineAlertLeadHours:
+              session.user.deadlineAlertLeadHours ?? savedPrefs.deadlineAlertLeadHours,
+            highRiskAlertsOnly:
+              session.user.highRiskAlertsOnly ?? savedPrefs.highRiskAlertsOnly,
+            dailyDigestEnabled:
+              session.user.dailyDigestEnabled ?? savedPrefs.dailyDigestEnabled
+          };
+        }
+
         return session;
       }
 
@@ -74,8 +96,14 @@ export const authService = {
       const rawLegacy = localStorage.getItem('c2a-auth-user');
       if (rawLegacy) {
         const legacyUser = JSON.parse(rawLegacy);
+        const savedPrefs = getStoredFirebaseUserPreferences(
+          legacyUser.firebaseUid || legacyUser.id || legacyUser.email
+        );
         return {
-          user: legacyUser,
+          user: {
+            ...savedPrefs,
+            ...legacyUser
+          },
           loginType: legacyUser.role === 'Guest' ? 'guest' : 'google',
           createdAt: Date.now(),
           expiresAt: Date.now() + GOOGLE_SESSION_TTL_MS,
@@ -92,6 +120,60 @@ export const authService = {
   getCurrentUser(): User | null {
     const session = this.getSession();
     return session ? session.user : null;
+  },
+
+  /**
+   * Updates the user's deadline email alert preferences and syncs with Firebase user profile data & Cloud SQL.
+   */
+  async updateUserPreferences(
+    prefs: Partial<UserAlertPreferences>
+  ): Promise<User | null> {
+    const session = this.getSession();
+    if (!session || !session.user) return null;
+
+    const syncedPrefs = await syncUserPreferencesToBackend(session.user, prefs);
+    const updatedUser: User = {
+      ...session.user,
+      ...syncedPrefs
+    };
+
+    const updatedSession: SessionData = {
+      ...session,
+      user: updatedUser
+    };
+
+    try {
+      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(updatedSession));
+      if (localStorage.getItem('c2a-auth-user')) {
+        localStorage.setItem('c2a-auth-user', JSON.stringify(updatedUser));
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    this.broadcastAuthChange({ type: 'LOGIN', user: updatedUser });
+
+    const logEvent = {
+      id: `act_${Date.now()}`,
+      timestamp: 'Just now',
+      userName: updatedUser.name,
+      userRole: updatedUser.role,
+      action: `Updated Firebase profile deadline email alerts (${
+        updatedUser.emailAlertsEnabled ? `Enabled • ${updatedUser.deadlineAlertLeadHours}h window` : 'Disabled'
+      })`,
+      target: 'Firebase Profile / Settings',
+      hash: Math.random().toString(16).substring(2, 10),
+      category: 'System' as const
+    };
+    MOCK_ACTIVITY_LOGS.unshift(logEvent);
+
+    fetch('/api/activity-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logEvent)
+    }).catch(() => {});
+
+    return updatedUser;
   },
 
   consumeSessionExpiredNotice(): string | null {

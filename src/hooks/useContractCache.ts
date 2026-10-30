@@ -10,6 +10,7 @@ import {
   saveContractMetadataToCache,
 } from "../services/contractCache";
 import { MOCK_CONTRACTS, MOCK_OBLIGATIONS } from "../data/mockData";
+import { downloadContractsFromState } from "../utils/csvExport";
 
 export function useContractCache() {
   const [cachePayload, setCachePayload] =
@@ -143,17 +144,49 @@ export function useContractCache() {
     [cachePayload.summaries]
   );
 
+  const isOfflineMode =
+    !isBrowserOnline || isSimulatedOffline || isUsingCachedFallback;
+
+  /**
+   * Converts the contract data currently in state (or a filtered subset) into a CSV string
+   * and triggers a browser download for the user.
+   */
+  const downloadContractsCSV = useCallback(
+    (customContracts?: typeof cachePayload.contracts, fileNamePrefix?: string) => {
+      const targetContracts = customContracts ?? cachePayload.contracts;
+      return downloadContractsFromState(
+        targetContracts,
+        cachePayload.summaries,
+        {
+          fileNamePrefix: fileNamePrefix || "contracts_offline_report",
+          cacheSource: isOfflineMode
+            ? `${cachePayload.source} (offline)`
+            : cachePayload.source,
+          syncedAt: cachePayload.syncedAt,
+        }
+      );
+    },
+    [
+      cachePayload.contracts,
+      cachePayload.summaries,
+      cachePayload.source,
+      cachePayload.syncedAt,
+      isOfflineMode,
+    ]
+  );
+
   return {
     contracts: cachePayload.contracts,
     summaries: cachePayload.summaries,
     syncedAt: cachePayload.syncedAt,
     cacheSource: cachePayload.source,
-    isOfflineMode: !isBrowserOnline || isSimulatedOffline || isUsingCachedFallback,
+    isOfflineMode,
     isSimulatedOffline,
     isSyncing,
     swRegistered,
     syncContractCache,
     toggleSimulatedOffline,
     getContractSummary,
+    downloadContractsCSV,
   };
 }

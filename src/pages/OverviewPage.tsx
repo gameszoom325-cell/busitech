@@ -17,8 +17,10 @@ import { MOCK_CONTRACTS } from '../data/mockData';
 import { ObligationsBarChart } from '../components/charts/ObligationsBarChart';
 import { RiskDonutChart } from '../components/charts/RiskDonutChart';
 import { ContractOverviewWidget } from '../components/charts/ContractOverviewWidget';
+import { ObligationsTrendLineChart } from '../components/charts/ObligationsTrendLineChart';
 import { AICommandBar } from '../components/ai/AICommandBar';
 import { SmartExportButton } from '../components/modals/SmartExportModal';
+import { exportContractsListToCSV } from '../services/smartExport';
 
 export const OverviewPage: React.FC = () => {
   const { user } = useAuth();
@@ -29,24 +31,11 @@ export const OverviewPage: React.FC = () => {
   const firstName = user?.name ? user.name.split(' ')[0] : 'Ayush';
 
   const handleExportCSV = () => {
-    showToast('Exporting Recent Contracts CSV...', 'info');
-    const headers = ['Contract Name', 'ID', 'Counterparty', 'Obligations', 'Next Deadline'];
-    const rows = MOCK_CONTRACTS.slice(0, 4).map(c => [
-      `"${c.name}"`,
-      `"${c.code}"`,
-      `"${c.counterparty}"`,
-      c.obligationsCount,
-      c.nextDeadlineToDisplay
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', 'recent_contracts_summary.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('Recent contracts CSV exported successfully', 'success');
+    const { fileName, rowCount } = exportContractsListToCSV({
+      contracts: MOCK_CONTRACTS,
+      fileNamePrefix: 'contracts_offline_report'
+    });
+    showToast(`Exported ${rowCount} contracts to ${fileName}`, 'success');
   };
 
   const handleReviewAndSend = (taskName: string) => {
@@ -225,6 +214,9 @@ export const OverviewPage: React.FC = () => {
 
       {/* RECHARTS CONTRACT OVERVIEW WIDGET */}
       <ContractOverviewWidget />
+
+      {/* RECHARTS 30-DAY ACTIVE VS COMPLETED OBLIGATIONS LINE CHART */}
+      <ObligationsTrendLineChart />
 
       {/* MAIN TWO-COLUMN SECTION (Tables on desktop, stacked on tablet/mobile) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6 items-start">

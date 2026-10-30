@@ -6,8 +6,8 @@
  * 2. Stale-While-Revalidate for static application assets and fonts.
  */
 
-const STATIC_CACHE_NAME = "c2a-static-shell-v1";
-const CONTRACT_METADATA_CACHE = "c2a-contract-metadata-v1";
+const STATIC_CACHE_NAME = "c2a-static-shell-v2";
+const CONTRACT_METADATA_CACHE = "c2a-contract-metadata-v2";
 
 const PRECACHE_URLS = ["/", "/index.html", "/manifest.json", "/icon.svg"];
 
@@ -76,7 +76,7 @@ self.addEventListener("fetch", (event) => {
               offline: true,
             }),
             {
-              status: 503,
+              status: 500,
               headers: { "Content-Type": "application/json" },
             }
           );

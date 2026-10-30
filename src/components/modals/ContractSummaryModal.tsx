@@ -11,9 +11,12 @@ import {
   WifiOff,
   ExternalLink,
   Clock,
+  Download,
 } from "lucide-react";
 import { ContractSummaryMetadata } from "../../services/contractCache";
 import { SmartExportButton } from "./SmartExportModal";
+import { downloadContractsFromState } from "../../utils/csvExport";
+import { useToast } from "../../context/ToastContext";
 
 interface ContractSummaryModalProps {
   summary: ContractSummaryMetadata | null;
@@ -34,7 +37,37 @@ export const ContractSummaryModal: React.FC<ContractSummaryModalProps> = ({
   cacheSource,
   syncedAt,
 }) => {
+  const { showToast } = useToast();
+
   if (!isOpen || !summary) return null;
+
+  const handleDownloadSingleContractCSV = () => {
+    const { fileName } = downloadContractsFromState(
+      [
+        {
+          id: summary.contractId,
+          code: summary.code,
+          name: summary.name,
+          counterparty: summary.counterparty,
+          type: summary.type,
+          status: summary.status,
+          obligationsCount: summary.obligationsCount,
+          nextDeadline: summary.nextDeadlineToDisplay,
+          nextDeadlineToDisplay: summary.nextDeadlineToDisplay,
+          hasRisk: summary.hasRisk,
+          fileSize: summary.fileSize,
+          uploadedDate: summary.uploadedAt,
+        },
+      ],
+      { [summary.contractId]: summary },
+      {
+        fileNamePrefix: `contract_${summary.code.toLowerCase()}`,
+        cacheSource: isOfflineMode ? `${cacheSource} (offline)` : cacheSource,
+        syncedAt,
+      }
+    );
+    showToast(`Downloaded ${fileName}`, "success");
+  };
 
   const formattedSyncTime = (() => {
     try {
@@ -259,10 +292,20 @@ export const ContractSummaryModal: React.FC<ContractSummaryModalProps> = ({
 
         {/* Footer Actions */}
         <div className="px-5 py-3.5 border-t border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] flex items-center justify-between gap-2 flex-wrap">
-          <SmartExportButton
-            label="Export Summary (PDF/CSV)"
-            defaultContractId={summary.contractId}
-          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleDownloadSingleContractCSV}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-main)] hover:bg-[var(--color-bg-hover)] transition-colors shadow-xs cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-[var(--color-success)] shrink-0" />
+              <span>Download CSV</span>
+            </button>
+            <SmartExportButton
+              label="Smart Export (PDF/CSV)"
+              defaultContractId={summary.contractId}
+            />
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"

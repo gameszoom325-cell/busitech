@@ -11,6 +11,17 @@ export interface User {
   department?: string;
   authLevel?: string;
   isOnline?: boolean;
+  emailAlertsEnabled?: boolean;
+  deadlineAlertLeadHours?: number;
+  highRiskAlertsOnly?: boolean;
+  dailyDigestEnabled?: boolean;
+}
+
+export interface UserAlertPreferences {
+  emailAlertsEnabled: boolean;
+  deadlineAlertLeadHours: number;
+  highRiskAlertsOnly: boolean;
+  dailyDigestEnabled: boolean;
 }
 
 export interface GuestRegistration {

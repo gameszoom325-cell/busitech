@@ -18,18 +18,48 @@ import {
 } from 'lucide-react';
 import { StatusChip } from '../components/common/StatusChip';
 import { useToast } from '../context/ToastContext';
-import { MOCK_ANALYSIS_OBLIGATIONS } from '../data/mockData';
-import { Obligation } from '../types';
+import { useAuth } from '../context/AuthContext';
+import {
+  MOCK_ANALYSIS_OBLIGATIONS,
+  MOCK_CONTRACTS,
+  MOCK_ACTIVITY_LOGS
+} from '../data/mockData';
+import { Contract, Obligation, ActivityEvent } from '../types';
 import { SmartExportButton } from '../components/modals/SmartExportModal';
 import { useContractCache } from '../hooks/useContractCache';
+import { ContractQuickActionsMenu } from '../components/common/ContractQuickActionsMenu';
+import {
+  generateSmartPDF,
+  exportContractsListToCSV
+} from '../services/smartExport';
 
 export const ExtractionAnalysisPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { getContractSummary, isOfflineMode, cacheSource } = useContractCache();
+  const { user } = useAuth();
+  const {
+    contracts,
+    summaries,
+    getContractSummary,
+    isOfflineMode,
+    cacheSource,
+    syncedAt
+  } = useContractCache();
 
-  const cachedContract = getContractSummary(id || 'ctr_stripe_msa');
+  const resolvedContractId = id || 'ctr_stripe_msa';
+  const cachedContract = getContractSummary(resolvedContractId);
+  const matchedContract =
+    contracts.find(c => c.id === resolvedContractId) ||
+    MOCK_CONTRACTS.find(c => c.id === resolvedContractId) ||
+    MOCK_CONTRACTS[0];
+
+  const [contractStatus, setContractStatus] = useState<Contract['status']>(
+    matchedContract?.status || 'Active'
+  );
+  const [isFlaggedForReview, setIsFlaggedForReview] = useState<boolean>(
+    matchedContract?.status === 'Pending Review' || Boolean(matchedContract?.hasRisk)
+  );
 
   const [selectedObligation, setSelectedObligation] = useState<Obligation>(MOCK_ANALYSIS_OBLIGATIONS[2]);
   const [docViewMode, setDocViewMode] = useState<'extracted' | 'original'>('extracted');
@@ -39,6 +69,140 @@ export const ExtractionAnalysisPage: React.FC = () => {
   const filteredObligations = partyFilter === 'All'
     ? MOCK_ANALYSIS_OBLIGATIONS
     : MOCK_ANALYSIS_OBLIGATIONS.filter(o => o.responsibleParty === partyFilter);
+
+  const persistContractUpdate = (
+    nextStatus: Contract['status'],
+    nextFlagged: boolean,
+    auditActionText: string
+  ) => {
+    const idx = MOCK_CONTRACTS.findIndex(c => c.id === resolvedContractId);
+    const updatedContract: Contract = {
+      ...(idx >= 0 ? MOCK_CONTRACTS[idx] : matchedContract),
+      id: resolvedContractId,
+      name: cachedContract?.name || matchedContract.name,
+      code: cachedContract?.code || matchedContract.code,
+      counterparty: cachedContract?.counterparty || matchedContract.counterparty,
+      status: nextStatus,
+      hasRisk: nextFlagged,
+      riskCount: nextFlagged ? Math.max(1, matchedContract.riskCount || 1) : 0
+    };
+
+    if (idx >= 0) {
+      MOCK_CONTRACTS[idx] = updatedContract;
+    }
+
+    const logEvent: ActivityEvent = {
+      id: `act_${Date.now()}`,
+      timestamp: 'Just now',
+      userName: user?.name || 'Authorized Reviewer',
+      userRole: user?.role || 'Admin',
+      action: auditActionText,
+      target: updatedContract.code,
+      hash: Math.random().toString(16).substring(2, 10),
+      category: 'Approval'
+    };
+    MOCK_ACTIVITY_LOGS.unshift(logEvent);
+
+    window.dispatchEvent(new CustomEvent('c2a:data-updated'));
+
+    fetch('/api/contracts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedContract)
+    }).catch(() => {});
+
+    fetch('/api/activity-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logEvent)
+    }).catch(() => {});
+  };
+
+  const handleFlagForReview = () => {
+    const nextFlagged = !isFlaggedForReview;
+    const nextStatus: Contract['status'] = nextFlagged ? 'Pending Review' : 'Active';
+    setIsFlaggedForReview(nextFlagged);
+    setContractStatus(nextStatus);
+
+    const contractTitle = cachedContract?.name || matchedContract.name;
+    if (nextFlagged) {
+      persistContractUpdate(
+        nextStatus,
+        true,
+        `Flagged contract "${contractTitle}" for human legal review`
+      );
+      showToast(`"${contractTitle}" flagged for review`, 'warning');
+    } else {
+      persistContractUpdate(
+        nextStatus,
+        false,
+        `Cleared review flag on "${contractTitle}" (restored to Active)`
+      );
+      showToast(`Review flag cleared for "${contractTitle}"`, 'info');
+    }
+  };
+
+  const handleArchiveContract = () => {
+    const isCurrentlyArchived = contractStatus === 'Archived';
+    const nextStatus: Contract['status'] = isCurrentlyArchived
+      ? isFlaggedForReview
+        ? 'Pending Review'
+        : 'Active'
+      : 'Archived';
+    setContractStatus(nextStatus);
+
+    const contractTitle = cachedContract?.name || matchedContract.name;
+    if (nextStatus === 'Archived') {
+      persistContractUpdate(
+        'Archived',
+        isFlaggedForReview,
+        `Archived contract "${contractTitle}" via Quick Actions`
+      );
+      showToast(`"${contractTitle}" moved to archive`, 'info');
+    } else {
+      persistContractUpdate(
+        nextStatus,
+        isFlaggedForReview,
+        `Restored contract "${contractTitle}" from archive to ${nextStatus}`
+      );
+      showToast(`"${contractTitle}" restored to ${nextStatus}`, 'success');
+    }
+  };
+
+  const handleExportSummary = (format: 'pdf' | 'csv' = 'pdf') => {
+    const currentContractObj: Contract = {
+      ...matchedContract,
+      id: resolvedContractId,
+      name: cachedContract?.name || matchedContract.name,
+      code: cachedContract?.code || matchedContract.code,
+      counterparty: cachedContract?.counterparty || matchedContract.counterparty,
+      status: contractStatus,
+      hasRisk: isFlaggedForReview
+    };
+
+    if (format === 'csv') {
+      const { fileName } = exportContractsListToCSV({
+        contracts: [currentContractObj],
+        summaries,
+        fileNamePrefix: `${currentContractObj.code.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_summary`,
+        cacheSource,
+        syncedAt
+      });
+      showToast(`Exported contract summary CSV (${fileName})`, 'success');
+    } else {
+      const fileName = generateSmartPDF({
+        format: 'pdf',
+        includeContracts: true,
+        includeObligations: true,
+        includeRiskAssessment: true,
+        contractFilterId: resolvedContractId,
+        customContracts: [currentContractObj],
+        customObligations: filteredObligations,
+        reportTitle: `${currentContractObj.name} — Executive Contract Summary`
+      });
+      showToast(`Exported contract summary PDF (${fileName})`, 'success');
+    }
+  };
 
   const handleLocateInText = () => {
     setIsHighlighted(true);
@@ -91,6 +255,22 @@ export const ExtractionAnalysisPage: React.FC = () => {
             <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-[var(--color-text-main)] tracking-tight truncate">
               {cachedContract?.name || 'Stripe Enterprise Master Services Agreement (2025)'}
             </h1>
+            <StatusChip
+              label={contractStatus}
+              variant={
+                contractStatus === 'Active'
+                  ? 'success'
+                  : contractStatus === 'Pending Review'
+                  ? 'warning'
+                  : 'neutral'
+              }
+              dot
+            />
+            {isFlaggedForReview && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[var(--color-warning-bg)] text-[var(--color-warning-text)] border border-[var(--color-warning-border)] shrink-0 whitespace-nowrap">
+                <span>Flagged for Review</span>
+              </span>
+            )}
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[var(--color-success-bg)] text-[var(--color-success-text)] border border-[var(--color-success-border)] shrink-0 whitespace-nowrap">
               <Check className="w-3.5 h-3.5 shrink-0" />
               <span>{cachedContract?.obligationsCount || 6} Obligations Extracted</span>
@@ -100,7 +280,7 @@ export const ExtractionAnalysisPage: React.FC = () => {
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
             <SmartExportButton
               label="Smart Export (PDF / CSV)"
-              defaultContractId={id || 'ctr_stripe_msa'}
+              defaultContractId={resolvedContractId}
               customObligations={filteredObligations}
             />
             <button
@@ -532,6 +712,21 @@ export const ExtractionAnalysisPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* QUICK ACTIONS FLOATING MENU */}
+      <ContractQuickActionsMenu
+        contractId={resolvedContractId}
+        contractName={cachedContract?.name || matchedContract.name}
+        contractCode={cachedContract?.code || matchedContract.code}
+        counterparty={cachedContract?.counterparty || matchedContract.counterparty}
+        currentStatus={contractStatus}
+        isFlaggedForReview={isFlaggedForReview}
+        summary={cachedContract}
+        obligations={filteredObligations}
+        onFlagForReview={handleFlagForReview}
+        onArchiveContract={handleArchiveContract}
+        onExportSummary={handleExportSummary}
+      />
 
       {/* STICKY BOTTOM ACTION BAR: Reserves safe area bottom */}
       <div className="fixed bottom-0 md:bottom-0 left-0 right-0 z-[var(--z-sticky)] p-3 bg-[var(--color-bg-card)] border-t border-[var(--color-border)] shadow-lg flex items-center justify-between px-3 sm:px-6 lg:px-8 pb-[calc(0.75rem+var(--safe-bottom))]">
