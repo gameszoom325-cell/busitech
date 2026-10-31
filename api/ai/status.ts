@@ -1,8 +1,9 @@
 import {
-  hasValidNvidiaApiKey,
-  NVIDIA_MODEL,
-  ALLOWED_MODELS,
-} from "../../server/nvidiaClient.ts";
+  hasValidOllamaApiKey,
+  resolveOllamaModel,
+  ALLOWED_OLLAMA_MODELS,
+} from "../../server/ollamaClient.ts";
+import { BUSINESS_TOOLS } from "../../server/businessTools.ts";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -14,20 +15,30 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  // Read inside the request handler and trim
-  const apiKey = (process.env.NVIDIA_API_KEY || "").trim();
-  const connected = Boolean(apiKey && apiKey !== "your_nvidia_api_key_here");
+  const connected = hasValidOllamaApiKey();
+  const model = resolveOllamaModel();
+
   res.status(200).json({
     connected,
-    provider: "NVIDIA",
-    model: NVIDIA_MODEL,
-    availableModels: ALLOWED_MODELS,
-    endpoints: ["POST /api/ai/chat"],
+    provider: "Ollama Cloud",
+    model,
+    availableModels: ALLOWED_OLLAMA_MODELS,
+    endpoints: [
+      "POST /api/ai/chat",
+      "POST /api/ai/analyze",
+      "POST /api/ai/insights",
+      "GET /api/ai/status",
+    ],
+    toolsCount: BUSINESS_TOOLS.length,
+    tools: BUSINESS_TOOLS.map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+    })),
     ...(connected
       ? {}
       : {
           message:
-            "NVIDIA_API_KEY is missing. Set NVIDIA_API_KEY in Vercel Project Settings > Environment Variables.",
+            "OLLAMA_API_KEY is missing. Set OLLAMA_API_KEY in your environment variables.",
         }),
   });
 }

@@ -108,7 +108,7 @@ const AGENT_PLAYBOOKS = [
   {
     id: "pb_search_reg",
     title: "Live Web Search: Cloud & SOC 2 Compliance",
-    subtitle: "Regulatory Search via DeepSeek V4.1 Flash",
+    subtitle: "Regulatory Search via Ollama Cloud (gemma4:31b-cloud)",
     useSearch: true,
     prompt:
       "Search and analyze the latest 2025 enterprise SOC 2 Type II, DORA, and GDPR cloud vendor compliance requirements impacting Stripe, AWS, and Snowflake contracts.",
@@ -143,7 +143,7 @@ This Agreement shall automatically renew for successive twelve (12) month period
 export const BusinessAgentPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"agent" | "extractor">("agent");
   const [selectedModel, setSelectedModel] =
-    useState<GeminiModelTier>("deepseek-ai/deepseek-v4.1-flash");
+    useState<GeminiModelTier>("gemma4:31b-cloud");
   const [selectedPersona, setSelectedPersona] =
     useState<AgentRolePersona>("ops_lead");
   const [useSearchGrounding, setUseSearchGrounding] = useState(false);
@@ -152,9 +152,9 @@ export const BusinessAgentPage: React.FC = () => {
     {
       id: "welcome_msg",
       role: "model",
-      text: "Hello! I am the **Busitech AI Business Agent** powered by **NVIDIA DeepSeek V4.1 Flash** (`deepseek-ai/deepseek-v4.1-flash`). You can customize my role persona above.\n\nSelect an executive playbook on the right or ask me any question about your contracts, obligations, or approvals below.",
+      text: "Hello! I am the **Busitech AI Business Agent** powered by **Ollama Cloud** (`gemma4:31b-cloud`). You can customize my role persona above.\n\nSelect an executive playbook on the right or ask me any question about your contracts, obligations, or approvals below.",
       timestamp: "Ready",
-      modelUsed: "deepseek-ai/deepseek-v4.1-flash",
+      modelUsed: "gemma4:31b-cloud",
       toolCalls: [],
     },
   ]);
@@ -248,7 +248,7 @@ export const BusinessAgentPage: React.FC = () => {
           onShowToast: (msg, type) => showToast(msg, type || "info"),
         },
         {
-          model: searchActive ? "gemini-3.8-flash" : selectedModel,
+          model: selectedModel,
           rolePersona: selectedPersona,
           useSearchGrounding: searchActive,
         }
@@ -264,7 +264,7 @@ export const BusinessAgentPage: React.FC = () => {
         }),
         modelUsed:
           response.modelUsed ||
-          (searchActive ? "gemini-3.8-flash" : selectedModel),
+          selectedModel,
         toolCalls: response.toolCalls || [],
         groundingSources: response.groundingSources || [],
         searchQueries: response.searchQueries || [],
@@ -274,7 +274,7 @@ export const BusinessAgentPage: React.FC = () => {
     } catch (err: any) {
       const errText =
         err?.message ||
-        "Failed to reach AI API. Please verify your NVIDIA_API_KEY in Vercel Project Settings.";
+        "Failed to reach AI API. Please verify your OLLAMA_API_KEY in your .env file.";
       showToast(errText, "error");
       setMessages((prev) => [
         ...prev,
@@ -304,7 +304,7 @@ export const BusinessAgentPage: React.FC = () => {
       });
       setExtractionResult(res);
       showToast(
-        `Extracted ${res.extractedObligations.length} obligations with DeepSeek`,
+        `Extracted ${res.extractedObligations.length} obligations with Ollama Cloud`,
         "success"
       );
     } catch (err: any) {
@@ -361,7 +361,7 @@ export const BusinessAgentPage: React.FC = () => {
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse shrink-0" />
             <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-[var(--color-primary-text)] uppercase font-mono">
-              NVIDIA DEEPSEEK AGENT • CONTRACT REASONING & ACTIONS
+              OLLAMA CLOUD AGENT • CONTRACT REASONING & ACTIONS
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[var(--color-text-main)] tracking-tight flex items-center gap-2.5">
@@ -369,7 +369,7 @@ export const BusinessAgentPage: React.FC = () => {
             <span>Busitech AI Business Agent</span>
           </h1>
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            Multi-turn conversational chatbot powered by NVIDIA DeepSeek (deepseek-ai/deepseek-v4.1-flash) for contract analysis, obligation tracking, and structured reasoning.
+            Multi-turn conversational chatbot powered by Ollama Cloud (gemma4:31b-cloud) for contract analysis, obligation tracking, and structured reasoning.
           </p>
         </div>
 
@@ -419,7 +419,7 @@ export const BusinessAgentPage: React.FC = () => {
                     </div>
                     <div className="text-[10px] font-mono text-[var(--color-text-muted)] truncate">
                       {useSearchGrounding
-                        ? "Regulatory Search Active (DeepSeek V4.1 Flash)"
+                        ? "Regulatory Search Active (Ollama Cloud)"
                         : `${selectedModel} • 8 Workspace Tools Active`}
                     </div>
                   </div>
@@ -454,7 +454,7 @@ export const BusinessAgentPage: React.FC = () => {
                   <Cpu className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
                   <select
                     aria-label="Select AI Model"
-                    value={useSearchGrounding ? "gemini-3.8-flash" : selectedModel}
+                    value={selectedModel}
                     disabled={useSearchGrounding}
                     onChange={(e) =>
                       setSelectedModel(e.target.value as GeminiModelTier)
@@ -497,7 +497,7 @@ export const BusinessAgentPage: React.FC = () => {
                       ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
                       : "bg-[var(--color-bg-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:text-[var(--color-text-main)]"
                   }`}
-                  title="Enable live regulatory search via NVIDIA DeepSeek"
+                  title="Enable live regulatory search via Ollama Cloud"
                 >
                   <Globe className="w-3.5 h-3.5 shrink-0" />
                   <span>
@@ -632,7 +632,7 @@ export const BusinessAgentPage: React.FC = () => {
                     <Loader2 className="w-4 h-4 animate-spin text-[var(--color-primary)] shrink-0" />
                     <span>
                       {useSearchGrounding
-                        ? "Searching live regulatory data with DeepSeek V4.1 Flash..."
+                        ? "Searching live regulatory data with Ollama Cloud (gemma4:31b-cloud)..."
                         : `Reasoning with ${selectedModel} and executing workspace tools...`}
                     </span>
                   </div>

@@ -4,6 +4,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import {
+  BUSINESS_TOOLS,
   BUSINESS_TOOL_DECLARATIONS,
   runBusinessAgentWithTools,
   extractObligationsFromText,
@@ -11,13 +12,14 @@ import {
   AgentRolePersona,
 } from "./server/businessTools.ts";
 import {
-  NVIDIA_MODEL,
-  ALLOWED_MODELS,
-  hasValidNvidiaApiKey,
-  formatNvidiaError,
-  getNvidiaClient,
-} from "./server/nvidiaClient.ts";
-import { formatGeminiError } from "./server/geminiClient.ts";
+  resolveOllamaBaseUrl,
+  resolveOllamaApiKey,
+  hasValidOllamaApiKey,
+  resolveOllamaModel,
+  ALLOWED_OLLAMA_MODELS,
+  getOllamaClient,
+  formatOllamaError,
+} from "./server/ollamaClient.ts";
 import { buildContractMetadataPayload } from "./src/services/contractCache.ts";
 import { verifyAuth, optionalAuth, AuthenticatedRequest } from "./src/middleware/auth.ts";
 import {
@@ -303,27 +305,29 @@ async function startServer() {
    * Shared handler for GET /api/ai/status
    */
   const handleStatusRequest = (_req: Request, res: Response) => {
-    const connected = hasValidNvidiaApiKey();
+    const connected = hasValidOllamaApiKey();
+    const model = resolveOllamaModel();
     res.json({
       connected,
-      provider: "NVIDIA",
-      model: NVIDIA_MODEL,
-      availableModels: ALLOWED_MODELS,
+      provider: "Ollama Cloud",
+      model,
+      availableModels: ALLOWED_OLLAMA_MODELS,
       endpoints: [
         "POST /api/ai/chat",
         "POST /api/ai/analyze",
         "POST /api/ai/insights",
+        "GET /api/ai/status",
       ],
-      toolsCount: BUSINESS_TOOL_DECLARATIONS.length,
-      tools: BUSINESS_TOOL_DECLARATIONS.map((t) => ({
-        name: t.name,
-        description: t.description,
+      toolsCount: BUSINESS_TOOLS.length,
+      tools: BUSINESS_TOOLS.map((t) => ({
+        name: t.function.name,
+        description: t.function.description,
       })),
       ...(connected
         ? {}
         : {
             message:
-              "NVIDIA_API_KEY is missing. Set NVIDIA_API_KEY in your environment variables.",
+              "OLLAMA_API_KEY is not configured. Set OLLAMA_API_KEY in your .env file.",
           }),
     });
   };
@@ -332,7 +336,7 @@ async function startServer() {
 
   /**
    * POST /api/ai/chat
-   * Powered by NVIDIA OpenAI-compatible API (DeepSeek V4.1 Flash)
+   * Powered by Ollama Cloud API (gemma4:31b-cloud)
    */
   app.post(
     "/api/ai/chat",
@@ -345,19 +349,30 @@ async function startServer() {
           message,
           messages: inputMessages,
           history,
+          mode,
+          model,
+          rolePersona,
+          snapshot,
         } = body;
 
-        const apiKey = (process.env.NVIDIA_API_KEY || "").trim();
-        if (!apiKey) {
-          res.status(401).json({
-            error:
-              "NVIDIA API key is not configured. Please add NVIDIA_API_KEY in Vercel Project Settings > Environment Variables.",
-            code: "MISSING_API_KEY",
+        const userPrompt = String(message || prompt || "").trim();
+
+        // When mode is "agent" or "command", run multi-turn agent with registered business tools
+        if (mode === "agent" || mode === "command") {
+          const result = await runBusinessAgentWithTools({
+            prompt: userPrompt || "Assist with enterprise contracts and workflows.",
+            history: Array.isArray(history) ? history : [],
+            snapshot,
+            mode,
+            model: typeof model === "string" ? model : undefined,
+            rolePersona: rolePersona as AgentRolePersona | undefined,
           });
+          res.json(result);
           return;
         }
 
-        const client = getNvidiaClient(apiKey);
+        const client = getOllamaClient();
+        const modelToUse = resolveOllamaModel(model);
 
         const systemPrompt = `You are the AI Business Assistant for Contract2Action AI (Busitech).
 You help enterprise users track contracts, audit legal obligations, monitor upcoming compliance deadlines, and triage human-in-the-loop approval workflows.
@@ -387,7 +402,6 @@ Keep answers concise, direct, professional, and actionable.`;
           }
         }
 
-        const userPrompt = String(message || prompt || "").trim();
         if (userPrompt) {
           messages.push({ role: "user", content: userPrompt });
         }
@@ -437,9 +451,6 @@ Keep answers concise, direct, professional, and actionable.`;
           clientActions.push({ type: "SET_THEME", payload: { theme: "light" } });
         }
 
-        const requestedModel = String(body.model || "").trim();
-        const modelToUse = NVIDIA_MODEL;
-
         const completion = await client.chat.completions.create({
           model: modelToUse,
           messages,
@@ -463,12 +474,12 @@ Keep answers concise, direct, professional, and actionable.`;
             "Review pending human-gate approvals",
           ],
           modelUsed: modelToUse,
-          requestedModel: requestedModel || modelToUse,
+          requestedModel: modelToUse,
         });
       } catch (err: unknown) {
-        const formatted = formatNvidiaError(
+        const formatted = formatOllamaError(
           err,
-          "Failed to process AI chat request with NVIDIA DeepSeek API."
+          "Failed to process AI chat request with Ollama Cloud API."
         );
         console.warn(`[/api/ai/chat] ${formatted.code}: ${formatted.message}`);
         res.status(formatted.status).json({
@@ -481,9 +492,9 @@ Keep answers concise, direct, professional, and actionable.`;
 
   /**
    * POST /api/ai/analyze
-   * Analyze business information, contract clauses, or operational data.
+   * Analyze business information, contract clauses, or operational data via Ollama.
    * - When `contractText` is provided, extracts structured obligations, risk score, and clause summary.
-   * - When general `data`, `prompt`, or `text` is provided, runs deep business/contract analysis via Gemini.
+   * - When general `data`, `prompt`, or `text` is provided, runs deep business/contract analysis.
    */
   app.post(
     "/api/ai/analyze",
@@ -566,9 +577,9 @@ Keep answers concise, direct, professional, and actionable.`;
           modelUsed: analysisResult.modelUsed,
         });
       } catch (err: unknown) {
-        const formatted = formatGeminiError(
+        const formatted = formatOllamaError(
           err,
-          "Failed to analyze business data with Gemini API."
+          "Failed to analyze business data with Ollama Cloud API."
         );
         console.warn(
           `[/api/ai/analyze] ${formatted.code}: ${formatted.message}`
@@ -583,7 +594,7 @@ Keep answers concise, direct, professional, and actionable.`;
 
   /**
    * POST /api/ai/insights
-   * Generates executive business insights, portfolio health score, and priority actions.
+   * Generates executive business insights, portfolio health score, and priority actions via Ollama.
    */
   app.post(
     "/api/ai/insights",
@@ -600,9 +611,9 @@ Keep answers concise, direct, professional, and actionable.`;
 
         res.json(insightsResult);
       } catch (err: unknown) {
-        const formatted = formatGeminiError(
+        const formatted = formatOllamaError(
           err,
-          "Failed to generate business insights with Gemini API."
+          "Failed to generate business insights with Ollama Cloud API."
         );
         console.warn(
           `[/api/ai/insights] ${formatted.code}: ${formatted.message}`
@@ -616,7 +627,7 @@ Keep answers concise, direct, professional, and actionable.`;
   );
 
   /**
-   * Backward-compatible aliases under /api/gemini/*
+   * Backward-compatible aliases under /api/gemini/* (Routed to Ollama)
    */
   app.post(
     "/api/gemini/command",
@@ -642,9 +653,9 @@ Keep answers concise, direct, professional, and actionable.`;
 
         res.json(result);
       } catch (err: unknown) {
-        const formatted = formatGeminiError(
+        const formatted = formatOllamaError(
           err,
-          "Failed to process command with Gemini API."
+          "Failed to process command with Ollama Cloud API."
         );
         console.warn(
           `[/api/gemini/command] ${formatted.code}: ${formatted.message}`
@@ -690,9 +701,9 @@ Keep answers concise, direct, professional, and actionable.`;
 
         res.json(result);
       } catch (err: unknown) {
-        const formatted = formatGeminiError(
+        const formatted = formatOllamaError(
           err,
-          "Failed to run AI Business Agent with Gemini API."
+          "Failed to run AI Business Agent with Ollama Cloud API."
         );
         console.warn(
           `[/api/gemini/agent] ${formatted.code}: ${formatted.message}`
@@ -731,9 +742,9 @@ Keep answers concise, direct, professional, and actionable.`;
 
         res.json(extraction);
       } catch (err: unknown) {
-        const formatted = formatGeminiError(
+        const formatted = formatOllamaError(
           err,
-          "Failed to extract contract obligations with Gemini API."
+          "Failed to extract contract obligations with Ollama Cloud API."
         );
         console.warn(
           `[/api/gemini/extract] ${formatted.code}: ${formatted.message}`
@@ -779,7 +790,7 @@ Keep answers concise, direct, professional, and actionable.`;
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(
-      `Busitech Server running on http://localhost:${PORT} (NVIDIA API key configured: ${hasValidNvidiaApiKey()})`
+      `Busitech Server running on http://localhost:${PORT} (Ollama Cloud API configured: ${hasValidOllamaApiKey()})`
     );
   });
 }

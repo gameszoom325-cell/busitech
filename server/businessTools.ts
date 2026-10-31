@@ -1,11 +1,9 @@
-import { FunctionDeclaration, Type } from "@google/genai";
+import type OpenAI from "openai";
 import {
-  GEMINI_FLASH_MODEL,
-  ALLOWED_GEMINI_MODELS,
-  SupportedGeminiModel,
-  generateContentWithFallback,
-  isQuotaOrRateLimitError,
-} from "./geminiClient.ts";
+  getOllamaClient,
+  resolveOllamaModel,
+  formatOllamaError,
+} from "./ollamaClient.ts";
 import {
   MOCK_CONTRACTS,
   MOCK_OBLIGATIONS,
@@ -46,216 +44,254 @@ export interface WorkspaceSnapshot {
 }
 
 export interface AgentTurnMessage {
-  role: "user" | "model";
-  text: string;
+  role: "user" | "model" | "assistant";
+  text?: string;
+  content?: string;
+}
+
+export interface BusinessToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
 }
 
 /**
- * Gemini Function Declarations for Busitech / Contract2Action AI
+ * Standard OpenAI / Ollama Tool Declarations for Busitech Contract2Action AI
  */
-export const BUSINESS_TOOL_DECLARATIONS: FunctionDeclaration[] = [
+export const BUSINESS_TOOLS: BusinessToolDefinition[] = [
   {
-    name: "search_contracts",
-    description:
-      "Search and filter active enterprise contracts by counterparty name, contract title, contract code, status, or risk flag.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        query: {
-          type: Type.STRING,
-          description:
-            "Optional search keyword matching contract name, counterparty (e.g. Stripe, AWS, Salesforce, Datadog, DHL, Snowflake), or contract code.",
-        },
-        status: {
-          type: Type.STRING,
-          description:
-            "Optional filter by contract status: 'Active', 'Pending Review', or 'Archived'.",
-        },
-        onlyWithRisk: {
-          type: Type.BOOLEAN,
-          description:
-            "If true, only return contracts that have flagged risk items.",
+    type: "function",
+    function: {
+      name: "search_contracts",
+      description:
+        "Search and filter active enterprise contracts by counterparty name, contract title, contract code, status, or risk flag.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Optional search keyword matching contract name, counterparty (e.g. Stripe, AWS, Salesforce, Datadog, DHL, Snowflake), or contract code.",
+          },
+          status: {
+            type: "string",
+            description:
+              "Optional filter by contract status: 'Active', 'Pending Review', or 'Archived'.",
+          },
+          onlyWithRisk: {
+            type: "boolean",
+            description:
+              "If true, only return contracts that have flagged risk items.",
+          },
         },
       },
     },
   },
   {
-    name: "list_obligations",
-    description:
-      "Query contractual obligations and deadlines across all agreements. Filter by status, risk level, category, or keyword.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        status: {
-          type: Type.STRING,
-          description:
-            "Optional obligation status filter: 'Pending', 'In Progress', 'Completed', or 'Overdue'.",
-        },
-        risk: {
-          type: Type.STRING,
-          description:
-            "Optional risk level filter: 'High', 'Medium', or 'Low'.",
-        },
-        category: {
-          type: Type.STRING,
-          description:
-            "Optional category filter: 'Payment', 'Delivery', 'Inspection', 'Compliance', 'Reporting', or 'SLA'.",
-        },
-        search: {
-          type: Type.STRING,
-          description:
-            "Optional keyword to match obligation title, contract name, owner, or clause reference.",
-        },
-      },
-    },
-  },
-  {
-    name: "create_obligation",
-    description:
-      "Create and register a new contractual obligation or business action item in the Busitech Obligations Registry.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        title: {
-          type: Type.STRING,
-          description: "Clear title of the obligation or action item.",
-        },
-        contractName: {
-          type: Type.STRING,
-          description:
-            "Name of the associated contract (e.g. 'Stripe Enterprise MSA', 'AWS Cloud Addendum', 'Salesforce Service Agreement').",
-        },
-        clauseRef: {
-          type: Type.STRING,
-          description: "Contract clause reference (e.g. 'Clause §9.4', 'Section 14.2').",
-        },
-        description: {
-          type: Type.STRING,
-          description: "Detailed operational description of what must be completed.",
-        },
-        ownerName: {
-          type: Type.STRING,
-          description: "Assigned owner name (e.g. 'Alex Chen', 'Sarah J.', 'Marcus Vance', 'Elena Rostova').",
-        },
-        dueDate: {
-          type: Type.STRING,
-          description: "Target due date in YYYY-MM-DD format.",
-        },
-        risk: {
-          type: Type.STRING,
-          description: "Risk level: 'High', 'Medium', or 'Low'.",
-        },
-        category: {
-          type: Type.STRING,
-          description:
-            "Category: 'Payment', 'Delivery', 'Inspection', 'Compliance', 'Reporting', or 'SLA'.",
-        },
-      },
-      required: ["title", "contractName", "dueDate", "risk", "category"],
-    },
-  },
-  {
-    name: "get_pending_approvals",
-    description:
-      "Retrieve human-in-the-loop approval queue items waiting for executive sign-off, including risk levels and contractual quotes.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        statusFilter: {
-          type: Type.STRING,
-          description:
-            "Filter approvals by status: 'Pending', 'Approved', 'Rejected', or 'ALL'. Defaults to 'Pending'.",
+    type: "function",
+    function: {
+      name: "list_obligations",
+      description:
+        "Query contractual obligations and deadlines across all agreements. Filter by status, risk level, category, or keyword.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            description:
+              "Optional obligation status filter: 'Pending', 'In Progress', 'Completed', or 'Overdue'.",
+          },
+          risk: {
+            type: "string",
+            description:
+              "Optional risk level filter: 'High', 'Medium', or 'Low'.",
+          },
+          category: {
+            type: "string",
+            description:
+              "Optional category filter: 'Payment', 'Delivery', 'Inspection', 'Compliance', 'Reporting', or 'SLA'.",
+          },
+          search: {
+            type: "string",
+            description:
+              "Optional keyword to match obligation title, contract name, owner, or clause reference.",
+          },
         },
       },
     },
   },
   {
-    name: "resolve_approval",
-    description:
-      "Approve or reject a human-gate approval item by ID or title match, recording an audit comment.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        approvalIdOrTitle: {
-          type: Type.STRING,
-          description:
-            "The approval ID (e.g. 'app_1', 'app_2', 'app_3') or title keyword (e.g. 'Termination Notice', 'SOC2', 'Calendar Sync').",
+    type: "function",
+    function: {
+      name: "create_obligation",
+      description:
+        "Create and register a new contractual obligation or business action item in the Busitech Obligations Registry.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Clear title of the obligation or action item.",
+          },
+          contractName: {
+            type: "string",
+            description:
+              "Name of the associated contract (e.g. 'Stripe Enterprise MSA', 'AWS Cloud Addendum', 'Salesforce Service Agreement').",
+          },
+          clauseRef: {
+            type: "string",
+            description: "Contract clause reference (e.g. 'Clause §9.4', 'Section 14.2').",
+          },
+          description: {
+            type: "string",
+            description: "Detailed operational description of what must be completed.",
+          },
+          ownerName: {
+            type: "string",
+            description: "Assigned owner name (e.g. 'Alex Chen', 'Sarah J.', 'Marcus Vance', 'Elena Rostova').",
+          },
+          dueDate: {
+            type: "string",
+            description: "Target due date in YYYY-MM-DD format.",
+          },
+          risk: {
+            type: "string",
+            description: "Risk level: 'High', 'Medium', or 'Low'.",
+            enum: ["High", "Medium", "Low"],
+          },
+          category: {
+            type: "string",
+            description:
+              "Category: 'Payment', 'Delivery', 'Inspection', 'Compliance', 'Reporting', or 'SLA'.",
+            enum: ["Payment", "Delivery", "Inspection", "Compliance", "Reporting", "SLA"],
+          },
         },
-        decision: {
-          type: Type.STRING,
-          description: "Decision to apply: 'Approved' or 'Rejected'.",
-        },
-        comment: {
-          type: Type.STRING,
-          description: "Audit trail rationale or executive note for the decision.",
-        },
+        required: ["title", "contractName", "dueDate", "risk", "category"],
       },
-      required: ["approvalIdOrTitle", "decision"],
     },
   },
   {
-    name: "analyze_business_risk",
-    description:
-      "Run a comprehensive Busitech business intelligence & risk analysis across all contracts, obligations, and pending approvals.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        focusArea: {
-          type: Type.STRING,
-          description:
-            "Optional focus area: 'financial', 'compliance', 'sla', 'renewals', or 'overall'.",
+    type: "function",
+    function: {
+      name: "get_pending_approvals",
+      description:
+        "Retrieve human-in-the-loop approval items waiting for executive sign-off, risk tiering, or escalation.",
+      parameters: {
+        type: "object",
+        properties: {
+          statusFilter: {
+            type: "string",
+            description:
+              "Optional filter: 'Pending', 'Approved', 'Rejected', or 'ALL'. Defaults to 'Pending'.",
+          },
         },
       },
     },
   },
   {
-    name: "draft_executive_notice",
-    description:
-      "Draft a formal legal or business notice (e.g. Non-Renewal Notice, SLA Credit Claim, Compliance Attestation) for a counterparty.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        noticeType: {
-          type: Type.STRING,
-          description:
-            "Type of notice: 'Non-Renewal Notice', 'SLA Credit Claim', 'Audit Submission Cover Letter', or 'Breach Remediation Notice'.",
+    type: "function",
+    function: {
+      name: "resolve_approval",
+      description:
+        "Approve or reject a human-gate approval item by ID or title keyword match, and log an audit reason.",
+      parameters: {
+        type: "object",
+        properties: {
+          approvalIdOrTitle: {
+            type: "string",
+            description:
+              "The approval ID (e.g. 'appr_001') or matching contract/title substring.",
+          },
+          decision: {
+            type: "string",
+            description: "Must be 'Approved' or 'Rejected'.",
+            enum: ["Approved", "Rejected"],
+          },
+          comment: {
+            type: "string",
+            description:
+              "Required rationale or condition for this human-in-the-loop audit log.",
+          },
         },
-        counterparty: {
-          type: Type.STRING,
-          description: "Counterparty organization name (e.g. 'Salesforce.com Inc.', 'Stripe Inc.', 'Amazon Web Services').",
-        },
-        contractRef: {
-          type: Type.STRING,
-          description: "Contract name and code reference.",
-        },
-        clauseRef: {
-          type: Type.STRING,
-          description: "Relevant contract section or clause number.",
-        },
-        keyPoints: {
-          type: Type.STRING,
-          description: "Key terms, dollar amounts, or dates to include in the formal notice.",
-        },
+        required: ["approvalIdOrTitle", "decision"],
       },
-      required: ["noticeType", "counterparty", "contractRef"],
     },
   },
   {
-    name: "navigate_workspace",
-    description:
-      "Navigate the user's browser to a specific application page or switch the UI theme mode.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        route: {
-          type: Type.STRING,
-          description:
-            "Optional target route path: '/overview', '/contracts', '/obligations', '/approvals', '/upload', '/activity', '/agent', or '/admin'.",
+    type: "function",
+    function: {
+      name: "analyze_business_risk",
+      description:
+        "Run business intelligence & portfolio risk analysis across all contracts, obligations, and approvals.",
+      parameters: {
+        type: "object",
+        properties: {
+          focusArea: {
+            type: "string",
+            description:
+              "Optional focus area: 'financial', 'compliance', 'sla', 'renewals', or 'overall'.",
+          },
         },
-        theme: {
-          type: Type.STRING,
-          description:
-            "Optional UI theme mode to set: 'light', 'dark', or 'system'.",
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "draft_executive_notice",
+      description:
+        "Draft a formal legal or operational notice for an enterprise counterparty (e.g., Non-Renewal Notice, SLA Credit Claim, Audit Notice).",
+      parameters: {
+        type: "object",
+        properties: {
+          noticeType: {
+            type: "string",
+            description:
+              "Type of formal notice, e.g. 'Non-Renewal Notice', 'SLA Credit Claim', 'Audit Request', 'Breach Notice'.",
+          },
+          counterparty: {
+            type: "string",
+            description: "Name of the counterparty organization (e.g. 'Salesforce Inc.', 'Amazon Web Services').",
+          },
+          contractRef: {
+            type: "string",
+            description: "Contract name and code reference.",
+          },
+          clauseRef: {
+            type: "string",
+            description: "Contract section or clause reference (e.g. 'Section 14.2', 'Clause §9.4').",
+          },
+          keyPoints: {
+            type: "string",
+            description: "Specific terms, deadline dates, amounts, or reasons to include.",
+          },
+        },
+        required: ["noticeType", "counterparty", "contractRef"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "navigate_workspace",
+      description:
+        "Navigate the user's browser to any platform page or switch the visual color theme.",
+      parameters: {
+        type: "object",
+        properties: {
+          route: {
+            type: "string",
+            description:
+              "Destination route: '/overview', '/contracts', '/obligations', '/approvals', '/activity', '/settings', or '/agent'.",
+          },
+          theme: {
+            type: "string",
+            description: "Switch visual theme: 'light', 'dark', or 'system'.",
+            enum: ["light", "dark", "system"],
+          },
         },
       },
     },
@@ -263,7 +299,16 @@ export const BUSINESS_TOOL_DECLARATIONS: FunctionDeclaration[] = [
 ];
 
 /**
- * Executes a single tool call requested by Gemini and collects any client-side UI actions.
+ * Backwards compatibility export for modules expecting BUSINESS_TOOL_DECLARATIONS
+ */
+export const BUSINESS_TOOL_DECLARATIONS = BUSINESS_TOOLS.map((t) => ({
+  name: t.function.name,
+  description: t.function.description,
+  parameters: t.function.parameters,
+}));
+
+/**
+ * Executes a single tool call requested by Ollama and collects any client-side UI actions.
  */
 export function executeBusinessTool(
   name: string,
@@ -354,12 +399,12 @@ export function executeBusinessTool(
             title: o.title,
             contractName: o.contractName,
             clauseRef: o.clauseRef,
-            ownerName: o.ownerName,
             dueDate: o.dueDate,
             status: o.status,
             risk: o.risk,
             category: o.category,
-            description: o.description,
+            ownerName: o.ownerName,
+            cadence: o.cadence,
           })),
         },
         clientActions,
@@ -367,73 +412,59 @@ export function executeBusinessTool(
     }
 
     case "create_obligation": {
-      const title = String(args.title || "Untitled Obligation").trim();
-      const contractName = String(
-        args.contractName || "Master Services Agreement"
-      ).trim();
-      const clauseRef = String(args.clauseRef || "Clause §1.1").trim();
+      const title = String(args.title || "").trim();
+      const contractName = String(args.contractName || "General Contract").trim();
+      const clauseRef = String(args.clauseRef || "General Section").trim();
       const description = String(
-        args.description ||
-          `Actionable obligation extracted by Busitech AI Agent for ${contractName}.`
+        args.description || "Actionable obligation registered by Ollama Agent"
       ).trim();
       const ownerName = String(args.ownerName || "Alex Chen").trim();
-      const dueDate = String(args.dueDate || "2025-11-30").trim();
-      const rawRisk = String(args.risk || "Medium").trim();
-      const risk: RiskLevel =
-        rawRisk === "High" || rawRisk === "Low" ? rawRisk : "Medium";
+      const dueDate = String(
+        args.dueDate ||
+          new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]
+      ).trim();
+      const risk = (args.risk as RiskLevel) || "Medium";
+      const category = (args.category as ObligationCategory) || "Compliance";
 
-      const validCategories: ObligationCategory[] = [
-        "Payment",
-        "Delivery",
-        "Inspection",
-        "Compliance",
-        "Reporting",
-        "SLA",
-      ];
-      const rawCat = String(args.category || "Compliance").trim();
-      const category: ObligationCategory = validCategories.includes(
-        rawCat as ObligationCategory
-      )
-        ? (rawCat as ObligationCategory)
-        : "Compliance";
+      const matchedContract = contracts.find(
+        (c) =>
+          c.name.toLowerCase().includes(contractName.toLowerCase()) ||
+          contractName.toLowerCase().includes(c.name.toLowerCase())
+      );
 
-      const initials =
-        ownerName
-          .split(" ")
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((p) => p[0]?.toUpperCase())
-          .join("") || "AI";
-
+      const newId = `ob_ai_${Date.now()}`;
       const newObligation: Obligation = {
-        id: `ob_ai_${Date.now()}`,
+        id: newId,
         title,
-        tag: "AI AGENT",
+        contractId: matchedContract ? matchedContract.id : "c_custom",
+        contractName: matchedContract ? matchedContract.name : contractName,
         clauseRef,
         description,
-        contractId: "ctr_stripe_msa",
-        contractName,
         ownerName,
-        ownerAvatar: initials,
         dueDate,
-        dueDateFormatted: dueDate,
+        dueDateFormatted: new Date(dueDate).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
         status: "Pending" as ObligationStatus,
         risk,
         category,
-        responsibleParty: "Acme Corp (Us)",
+        isOverdue: new Date(dueDate).getTime() < Date.now(),
+        responsibleParty: "Our Organization",
         verificationStatus: "Verified",
+        cadence: "One-time",
       };
-
-      MOCK_OBLIGATIONS.unshift(newObligation);
 
       clientActions.push({
         type: "ADD_OBLIGATION",
         payload: { obligation: newObligation },
       });
+
       clientActions.push({
         type: "SHOW_TOAST",
         payload: {
-          message: `Created obligation: "${title}"`,
+          message: `Obligation created: "${title}" (${dueDate})`,
           toastType: "success",
         },
       });
@@ -441,36 +472,41 @@ export function executeBusinessTool(
       return {
         toolResponse: {
           success: true,
-          message: `Obligation "${title}" has been created and added to the registry.`,
-          obligation: newObligation,
+          obligationId: newId,
+          created: {
+            title: newObligation.title,
+            contractName: newObligation.contractName,
+            clauseRef: newObligation.clauseRef,
+            dueDate: newObligation.dueDate,
+            risk: newObligation.risk,
+            category: newObligation.category,
+            ownerName: newObligation.ownerName,
+          },
+          message: `Obligation "${title}" successfully registered in the platform registry.`,
         },
         clientActions,
       };
     }
 
     case "get_pending_approvals": {
-      const statusFilter = String(args.statusFilter || "Pending")
-        .toLowerCase()
-        .trim();
-
-      const matched = approvals.filter((a) => {
-        if (statusFilter === "all") return true;
-        return a.status.toLowerCase() === statusFilter;
+      const filter = String(args.statusFilter || "Pending").trim();
+      const filtered = approvals.filter((a) => {
+        if (!filter || filter.toUpperCase() === "ALL") return true;
+        return a.status.toLowerCase() === filter.toLowerCase();
       });
 
       return {
         toolResponse: {
-          count: matched.length,
-          approvals: matched.map((a) => ({
+          count: filtered.length,
+          approvals: filtered.map((a) => ({
             id: a.id,
             title: a.title,
-            riskLevel: a.riskLevel,
-            dueDateTag: a.dueDateTag,
             contractRef: a.contractRef,
             clauseRef: a.clauseRef,
-            description: a.description,
-            contractualBasisQuote: a.contractualBasisQuote,
+            riskLevel: a.riskLevel,
+            riskScore: a.riskScore,
             status: a.status,
+            dueDateTag: a.dueDateTag,
           })),
         },
         clientActions,
@@ -478,53 +514,31 @@ export function executeBusinessTool(
     }
 
     case "resolve_approval": {
-      const needle = String(args.approvalIdOrTitle || "")
-        .toLowerCase()
-        .trim();
-      const rawDecision = String(args.decision || "Approved").trim();
-      const decision: "Approved" | "Rejected" =
-        rawDecision.toLowerCase().startsWith("rej") ? "Rejected" : "Approved";
-      const comment = String(
-        args.comment || "Processed via Busitech AI Business Agent"
-      ).trim();
+      const targetQuery = String(args.approvalIdOrTitle || "").toLowerCase().trim();
+      const decision = String(args.decision || "").trim() as
+        | "Approved"
+        | "Rejected";
+      const comment = String(args.comment || "Resolved by Ollama Agent").trim();
 
-      const target =
-        approvals.find(
-          (a) =>
-            a.id.toLowerCase() === needle ||
-            a.title.toLowerCase().includes(needle) ||
-            a.contractRef.toLowerCase().includes(needle)
-        ) || MOCK_APPROVALS.find((a) => a.status === "Pending");
+      const target = approvals.find(
+        (a) =>
+          a.id.toLowerCase() === targetQuery ||
+          a.title.toLowerCase().includes(targetQuery) ||
+          a.contractRef.toLowerCase().includes(targetQuery)
+      );
 
       if (!target) {
         return {
           toolResponse: {
             success: false,
-            error: `No matching approval item found for "${args.approvalIdOrTitle}".`,
+            error: `Could not find any approval item matching "${targetQuery}".`,
+            availablePendingApprovals: approvals
+              .filter((a) => a.status === "Pending")
+              .map((a) => `${a.id}: ${a.title}`),
           },
           clientActions,
         };
       }
-
-      target.status = decision;
-      target.resolvedAt = new Date().toISOString();
-
-      const serverTarget = MOCK_APPROVALS.find((a) => a.id === target.id);
-      if (serverTarget) {
-        serverTarget.status = decision;
-        serverTarget.resolvedAt = target.resolvedAt;
-      }
-
-      MOCK_ACTIVITY_LOGS.unshift({
-        id: `act_ai_${Date.now()}`,
-        timestamp: "Just now",
-        userName: "Busitech AI Agent",
-        userRole: "Admin",
-        action: `${decision}: ${target.title} ("${comment}")`,
-        target: `${target.contractRef} ${target.clauseRef}`,
-        hash: Math.random().toString(16).substring(2, 10),
-        category: "Approval",
-      });
 
       clientActions.push({
         type: "RESOLVE_APPROVAL",
@@ -534,10 +548,11 @@ export function executeBusinessTool(
           comment,
         },
       });
+
       clientActions.push({
         type: "SHOW_TOAST",
         payload: {
-          message: `${decision} "${target.title}"`,
+          message: `${decision}: "${target.title}"`,
           toastType: decision === "Approved" ? "success" : "warning",
         },
       });
@@ -547,116 +562,113 @@ export function executeBusinessTool(
           success: true,
           approvalId: target.id,
           title: target.title,
-          contractRef: target.contractRef,
           decision,
           comment,
-          resolvedAt: target.resolvedAt,
+          resolvedAt: new Date().toISOString(),
+          message: `Approval item ${target.id} marked as ${decision}.`,
         },
         clientActions,
       };
     }
 
     case "analyze_business_risk": {
-      const focusArea = String(args.focusArea || "overall").toLowerCase();
+      const focus = String(args.focusArea || "overall").toLowerCase().trim();
+
+      const totalContracts = contracts.length;
+      const contractsWithRisk = contracts.filter((c) => c.hasRisk);
       const highRiskObligations = obligations.filter((o) => o.risk === "High");
-      const overdueObligations = obligations.filter(
-        (o) => o.status === "Overdue" || o.isOverdue
-      );
+      const overdueObligations = obligations.filter((o) => o.status === "Overdue");
       const pendingApprovals = approvals.filter((a) => a.status === "Pending");
-      const riskyContracts = contracts.filter((c) => c.hasRisk);
+      const highRiskApprovals = pendingApprovals.filter(
+        (a) => a.riskLevel === "HIGH RISK"
+      );
+
+      const highRiskCount = contractsWithRisk.length + highRiskObligations.length;
+      const healthScore = Math.max(
+        40,
+        Math.min(98, 100 - highRiskCount * 5 - overdueObligations.length * 8)
+      );
 
       return {
         toolResponse: {
-          focusArea,
-          summaryMetrics: {
-            totalActiveContracts: contracts.length,
-            contractsWithFlaggedRisk: riskyContracts.length,
-            totalTrackedObligations: obligations.length,
+          focusArea: focus,
+          portfolioHealthScore: healthScore,
+          metrics: {
+            totalContracts,
+            contractsWithRisk: contractsWithRisk.length,
             highRiskObligationsCount: highRiskObligations.length,
             overdueObligationsCount: overdueObligations.length,
-            pendingHumanGateApprovals: pendingApprovals.length,
-            estimatedAutoRenewalExposureUSD: 48000,
-            portfolioComplianceScore: "96.4%",
+            pendingApprovalsCount: pendingApprovals.length,
+            highRiskApprovalsCount: highRiskApprovals.length,
           },
-          criticalBottlenecks: [
-            ...overdueObligations.map((o) => ({
-              type: "OVERDUE_OBLIGATION",
-              id: o.id,
-              title: o.title,
-              contract: o.contractName,
-              clause: o.clauseRef,
-              owner: o.ownerName,
-              dueDate: o.dueDate,
-            })),
-            ...pendingApprovals
-              .filter((a) => a.riskLevel === "HIGH RISK")
-              .map((a) => ({
-                type: "HIGH_RISK_APPROVAL_GATE",
-                id: a.id,
-                title: a.title,
-                contract: a.contractRef,
-                clause: a.clauseRef,
-                dueDateTag: a.dueDateTag,
-              })),
-          ],
-          recommendations: [
-            "Immediately approve and dispatch the Salesforce Section 14.2 Non-Renewal Notice to prevent a $48,000 automatic 12-month lock-in.",
-            "Complete the AWS Reserved Instance quarterly true-up (Clause 4.1) before Oct 28 to optimize cloud compute commitment spend.",
-            "Verify transmission of the SOC2 Type II Audit Report to Stripe Compliance Portal under Clause §9.4.",
-          ],
+          keyExposures: [
+            ...contractsWithRisk.map(
+              (c) =>
+                `Contract ${c.code} (${c.counterparty}) has ${c.riskCount || 1} flagged risk items.`
+            ),
+            ...highRiskObligations.map(
+              (o) =>
+                `High Risk Obligation: "${o.title}" in ${o.contractName} due on ${o.dueDate}.`
+            ),
+          ].slice(0, 5),
+          recommendedAction:
+            overdueObligations.length > 0
+              ? `Triage ${overdueObligations.length} overdue obligations immediately to prevent contractual penalties.`
+              : `Review ${highRiskApprovals.length} high-risk approval gates awaiting executive resolution.`,
         },
         clientActions,
       };
     }
 
     case "draft_executive_notice": {
-      const noticeType = String(args.noticeType || "Formal Contractual Notice");
-      const counterparty = String(args.counterparty || "Counterparty Legal Dept");
-      const contractRef = String(args.contractRef || "Master Services Agreement");
-      const clauseRef = String(args.clauseRef || "Applicable Clause");
-      const keyPoints = String(
-        args.keyPoints ||
-          "Formal notification pursuant to the terms and conditions of the agreement."
-      );
-      const dateStr = new Date().toISOString().split("T")[0];
+      const noticeType = String(args.noticeType || "Operational Notice").trim();
+      const counterparty = String(args.counterparty || "Counterparty Inc.").trim();
+      const contractRef = String(args.contractRef || "Agreement").trim();
+      const clauseRef = String(args.clauseRef || "Governing Clause").trim();
+      const keyPoints = String(args.keyPoints || "Per contractual terms").trim();
 
-      const draftBody = [
-        `OFFICIAL LEGAL & OPERATIONS NOTICE — ${noticeType.toUpperCase()}`,
-        `Date: ${dateStr}`,
-        `To: Legal & Contract Administration, ${counterparty}`,
-        `From: Busitech / Contract2Action AI Governance Operations (Acme Corp)`,
-        `Reference: ${contractRef} (${clauseRef})`,
-        `------------------------------------------------------------------------`,
-        `Dear ${counterparty} Legal & Account Team,`,
-        ``,
-        `Pursuant to ${clauseRef} of the ${contractRef}, Acme Corp hereby provides formal written notice regarding: ${noticeType}.`,
-        ``,
-        `Key Operational Particulars:`,
-        `${keyPoints}`,
-        ``,
-        `Please confirm receipt of this electronic transmission within two (2) business days. This dispatch has been cryptographically logged in the Busitech Contract2Action Audit Ledger.`,
-        ``,
-        `Sincerely,`,
-        `Authorized Legal & Operations Signatory`,
-        `Acme Corp • Busitech Governance Platform`,
-      ].join("\n");
+      const dateStr = new Date().toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+
+      const draftedNotice = `FORMAL NOTICE OF ${noticeType.toUpperCase()}
+Date: ${dateStr}
+To: ${counterparty} (Legal & Operations Department)
+From: Contract Administration & Legal Operations, Busitech Enterprise
+Subject: Notice regarding ${contractRef} - ${clauseRef}
+
+Dear Legal Operations Team at ${counterparty},
+
+This official correspondence serves as formal notice under ${clauseRef} of the ${contractRef} between our organizations.
+
+Summary of Matter:
+${keyPoints}
+
+In accordance with our contractual terms, we request your prompt acknowledgment of this notice within five (5) business days. All rights and remedies under the agreement remain fully reserved.
+
+Sincerely,
+Contract Administration & Legal Operations
+Busitech Enterprise Platform`;
 
       return {
         toolResponse: {
+          success: true,
           noticeType,
           counterparty,
           contractRef,
           clauseRef,
-          generatedAt: new Date().toISOString(),
-          draftDocument: draftBody,
+          draftedText: draftedNotice,
+          message: `Formal ${noticeType} drafted for ${counterparty}. Ready for executive export or delivery.`,
         },
         clientActions,
       };
     }
 
     case "navigate_workspace": {
-      const route = args.route ? String(args.route).trim() : "";
-      const theme = args.theme ? String(args.theme).toLowerCase().trim() : "";
+      const route = String(args.route || "").trim();
+      const theme = (args.theme as "light" | "dark" | "system") || undefined;
 
       if (route) {
         clientActions.push({
@@ -664,7 +676,8 @@ export function executeBusinessTool(
           payload: { route },
         });
       }
-      if (theme === "light" || theme === "dark" || theme === "system") {
+
+      if (theme) {
         clientActions.push({
           type: "SET_THEME",
           payload: { theme },
@@ -702,7 +715,7 @@ const SYSTEM_INSTRUCTION = `You are the Busitech AI Business Agent powering the 
 Your role is to help executives, legal ops, and procurement leads understand contracts, automate business actions, monitor deadlines, evaluate risk exposure, and execute workflows using your registered tools.
 
 Guidelines:
-1. Always use your tools (search_contracts, list_obligations, create_obligation, get_pending_approvals, resolve_approval, analyze_business_risk, draft_executive_notice, navigate_workspace) whenever the user asks about contracts, obligations, approvals, risk metrics, drafting notices, creating tasks, or navigating the app.
+1. Always use your registered tools (search_contracts, list_obligations, create_obligation, get_pending_approvals, resolve_approval, analyze_business_risk, draft_executive_notice, navigate_workspace) whenever the user asks about contracts, obligations, approvals, risk metrics, drafting notices, creating tasks, or navigating the app.
 2. Be concise, executive, and action-oriented. Reference specific contract names, clause numbers (e.g., Section 14.2, Clause §9.4), owners, and deadlines.
 3. Format responses cleanly with short bullet points or structured sections so they are easy to scan in both the AI Command Bar and the AI Business Agent workspace.`;
 
@@ -713,10 +726,11 @@ const ROLE_PERSONA_INSTRUCTIONS: Record<AgentRolePersona, string> = {
 };
 
 /**
- * Multi-turn Gemini Business Agent with support for:
- * - Selectable Gemini models: gemini-4-argon (Complex), gemini-3.8-flash (General/Search), gemini-3.1-flash-lite (Fast)
+ * Multi-turn Ollama Business Agent with support for:
+ * - Model: gemma4:31b-cloud (configurable via OLLAMA_MODEL or request parameter)
  * - Role-based system instructions (ops_lead, legal_counsel, risk_analyst)
- * - Automatic server-side Function Calling OR live Google Search Grounding (googleSearch tool with gemini-3.8-flash)
+ * - Full function calling with 8 workspace tools
+ * - Automatic client action generation
  */
 export async function runBusinessAgentWithTools(params: {
   prompt: string;
@@ -735,232 +749,141 @@ export async function runBusinessAgentWithTools(params: {
   groundingSources?: GroundingSource[];
   searchQueries?: string[];
 }> {
+  const client = getOllamaClient();
+  const modelToUse = resolveOllamaModel(params.model);
+
   const toolCalls: ToolExecutionRecord[] = [];
   const clientActions: ClientSideAction[] = [];
   const groundingSources: GroundingSource[] = [];
   const searchQueries: string[] = [];
 
-  // Build contents array from conversation history
-  const contents: Array<Record<string, unknown>> = [];
+  const personaKey: AgentRolePersona = params.rolePersona || "ops_lead";
+  const systemInstruction = ROLE_PERSONA_INSTRUCTIONS[personaKey];
+
+  // Construct message thread for OpenAI-compatible chat completions
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemInstruction },
+  ];
+
   if (params.history && Array.isArray(params.history)) {
     for (const msg of params.history.slice(-12)) {
-      if (msg.text && msg.text.trim()) {
-        contents.push({
-          role: msg.role === "model" ? "model" : "user",
-          parts: [{ text: msg.text }],
+      const text = String(msg.text || msg.content || "").trim();
+      if (text) {
+        messages.push({
+          role: msg.role === "model" || msg.role === "assistant" ? "assistant" : "user",
+          content: text,
         });
       }
     }
   }
-  contents.push({
+
+  messages.push({
     role: "user",
-    parts: [{ text: params.prompt }],
+    content: params.prompt,
   });
 
-  const personaKey: AgentRolePersona =
-    params.rolePersona && ROLE_PERSONA_INSTRUCTIONS[params.rolePersona]
-      ? params.rolePersona
-      : "ops_lead";
-
-  const baseInstruction = ROLE_PERSONA_INSTRUCTIONS[personaKey];
-
-  // Google Search Grounding mode MUST use gemini-3.8-flash and tools: [{ googleSearch: {} }]
-  // without combining functionDeclarations in the same request.
-  if (params.useSearchGrounding) {
-    const contractsSummary = (params.snapshot?.contracts || MOCK_CONTRACTS)
-      .map(
-        (c) =>
-          `${c.name} (${c.code}, Counterparty: ${c.counterparty}, Type: ${c.type}, Status: ${c.status}, Next Deadline: ${c.nextDeadlineToDisplay})`
-      )
-      .join("; ");
-
-    const groundedSystemInstruction = `${baseInstruction}\n\nYou have live Google Search Grounding enabled. Use Google Search to retrieve up-to-date, accurate regulatory, security, financial, and counterparty news relevant to the user's question and our active contract portfolio (${contractsSummary}). Cite concrete facts and dates.`;
-
-    const { response, modelUsed } = await generateContentWithFallback({
-      model: GEMINI_FLASH_MODEL,
-      contents: contents as any,
-      config: {
-        systemInstruction: groundedSystemInstruction,
-        tools: [{ googleSearch: {} }],
-      },
-    });
-
-    if (
-      !response ||
-      !Array.isArray(response.candidates) ||
-      response.candidates.length === 0
-    ) {
-      const invalidErr = new Error(
-        "Invalid response received from Gemini Search Grounding: No candidates returned."
-      ) as Error & { status?: number; code?: string };
-      invalidErr.status = 500;
-      invalidErr.code = "INVALID_GEMINI_RESPONSE";
-      throw invalidErr;
-    }
-
-    const groundingMeta = response.candidates[0]?.groundingMetadata as
-      | {
-          groundingChunks?: Array<{
-            web?: { uri?: string; title?: string };
-          }>;
-          webSearchQueries?: string[];
-        }
-      | undefined;
-
-    if (groundingMeta?.groundingChunks) {
-      const seenUris = new Set<string>();
-      for (const chunk of groundingMeta.groundingChunks) {
-        const uri = chunk.web?.uri;
-        if (uri && !seenUris.has(uri)) {
-          seenUris.add(uri);
-          groundingSources.push({
-            title: chunk.web?.title || uri,
-            uri,
-          });
-        }
-      }
-    }
-
-    if (Array.isArray(groundingMeta?.webSearchQueries)) {
-      searchQueries.push(...groundingMeta.webSearchQueries);
-    }
-
-    const replyText =
-      (typeof response.text === "string" && response.text.trim()) ||
-      "Search grounding completed.";
-
-    return {
-      reply: replyText,
-      toolCalls,
-      clientActions,
-      suggestedFollowUps: [
-        "Check latest SOC 2 & DORA cloud compliance rules for 2025",
-        "Search recent Stripe and Cloudflare SLA security advisories",
-        "Look up GDPR cross-border data transfer updates for Snowflake DPA",
-      ],
-      modelUsed,
-      groundingSources,
-      searchQueries,
-    };
+  // Client-side UI command detection for navigation/theme commands
+  const lowerPrompt = params.prompt.toLowerCase();
+  if (
+    lowerPrompt.includes("go to contracts") ||
+    lowerPrompt.includes("open contracts") ||
+    lowerPrompt.includes("view contracts")
+  ) {
+    clientActions.push({ type: "NAVIGATE", payload: { route: "/contracts" } });
+  } else if (
+    lowerPrompt.includes("go to obligations") ||
+    lowerPrompt.includes("open obligations") ||
+    lowerPrompt.includes("view obligations")
+  ) {
+    clientActions.push({ type: "NAVIGATE", payload: { route: "/obligations" } });
+  } else if (
+    lowerPrompt.includes("go to approvals") ||
+    lowerPrompt.includes("open approvals") ||
+    lowerPrompt.includes("view approvals")
+  ) {
+    clientActions.push({ type: "NAVIGATE", payload: { route: "/approvals" } });
+  } else if (
+    lowerPrompt.includes("go to overview") ||
+    lowerPrompt.includes("open overview")
+  ) {
+    clientActions.push({ type: "NAVIGATE", payload: { route: "/overview" } });
+  } else if (
+    lowerPrompt.includes("dark mode") ||
+    lowerPrompt.includes("theme dark")
+  ) {
+    clientActions.push({ type: "SET_THEME", payload: { theme: "dark" } });
+  } else if (
+    lowerPrompt.includes("light mode") ||
+    lowerPrompt.includes("theme light")
+  ) {
+    clientActions.push({ type: "SET_THEME", payload: { theme: "light" } });
   }
 
-  const selectedModel: SupportedGeminiModel =
-    params.model &&
-    ALLOWED_GEMINI_MODELS.includes(params.model as SupportedGeminiModel)
-      ? (params.model as SupportedGeminiModel)
-      : GEMINI_FLASH_MODEL;
-
-  const modeInstruction =
-    params.mode === "command"
-      ? `${baseInstruction}\nYou are responding inside the compact AI Command Bar (⌘K). Keep your final answer brief (2-5 sentences or a compact bullet list) and execute requested actions immediately via tools.`
-      : baseInstruction;
-
-  let maxTurns = 4;
   let finalReply = "";
-  let actualModelUsed: string = selectedModel;
+  let iterations = 0;
+  const maxIterations = 5;
 
-  while (maxTurns > 0) {
-    maxTurns--;
+  while (iterations < maxIterations) {
+    iterations++;
 
-    let response;
-    try {
-      const result = await generateContentWithFallback({
-        model: actualModelUsed,
-        contents: contents as any,
-        config: {
-          systemInstruction: modeInstruction,
-          tools: [{ functionDeclarations: BUSINESS_TOOL_DECLARATIONS }],
-        },
-      });
-      response = result.response;
-      actualModelUsed = result.modelUsed;
-    } catch (err: unknown) {
-      // If a rate limit occurs after tools were already executed, synthesize the tool results directly
-      if (isQuotaOrRateLimitError(err) && toolCalls.length > 0) {
-        finalReply = toolCalls
-          .map(
-            (tc) =>
-              `Executed **${tc.name}**: ${
-                typeof tc.result?.summary === "string"
-                  ? tc.result.summary
-                  : typeof tc.result?.message === "string"
-                  ? tc.result.message
-                  : JSON.stringify(tc.result)
-              }`
-          )
-          .join("\n\n");
-        break;
-      }
-      throw err;
-    }
+    const completion = await client.chat.completions.create({
+      model: modelToUse,
+      messages,
+      tools: BUSINESS_TOOLS as OpenAI.Chat.Completions.ChatCompletionTool[],
+      tool_choice: "auto",
+      temperature: 0.3,
+    });
 
-    if (!response || !Array.isArray(response.candidates) || response.candidates.length === 0) {
-      const invalidErr = new Error(
-        "Invalid response received from Gemini API: No response candidates were returned by the model."
-      ) as Error & { status?: number; code?: string };
-      invalidErr.status = 500;
-      invalidErr.code = "INVALID_GEMINI_RESPONSE";
-      throw invalidErr;
-    }
-
-    const candidateContent = response.candidates[0]?.content;
-    const functionCalls = response.functionCalls;
-
-    if (!functionCalls || functionCalls.length === 0) {
-      const textReply = typeof response.text === "string" ? response.text.trim() : "";
-      if (!textReply && toolCalls.length === 0) {
-        const emptyErr = new Error(
-          "Invalid response received from Gemini API: The model returned neither text output nor tool calls."
-        ) as Error & { status?: number; code?: string };
-        emptyErr.status = 500;
-        emptyErr.code = "INVALID_GEMINI_RESPONSE";
-        throw emptyErr;
-      }
-      finalReply =
-        textReply ||
-        "Action completed. Let me know if you would like to inspect any specific contract or obligation.";
+    const choice = completion.choices[0];
+    if (!choice || !choice.message) {
       break;
     }
 
-    // Preserve the model's turn in the conversation history
-    if (candidateContent) {
-      contents.push(candidateContent as any);
+    const message = choice.message;
+    messages.push(message);
+
+    // If the model did not request tool calls, we have the final assistant reply
+    if (!message.tool_calls || message.tool_calls.length === 0) {
+      finalReply = message.content?.trim() || "";
+      break;
     }
 
-    // Execute all requested function calls and return their responses
-    const functionResponseParts: Array<Record<string, unknown>> = [];
+    // Execute requested tools
+    for (const toolCall of message.tool_calls) {
+      if (toolCall.type === "function") {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(toolCall.function.arguments || "{}");
+        } catch {
+          args = {};
+        }
 
-    for (const fc of functionCalls) {
-      const fnName = fc.name || "unknown_tool";
-      const fnArgs = (fc.args as Record<string, unknown>) || {};
-      const { toolResponse, clientActions: newActions } = executeBusinessTool(
-        fnName,
-        fnArgs,
-        params.snapshot
-      );
+        const { toolResponse, clientActions: newActions } = executeBusinessTool(
+          toolCall.function.name,
+          args,
+          params.snapshot
+        );
 
-      clientActions.push(...newActions);
-      toolCalls.push({
-        id: fc.id || `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        name: fnName,
-        args: fnArgs,
-        result: toolResponse,
-        timestamp: new Date().toISOString(),
-      });
+        clientActions.push(...newActions);
+        toolCalls.push({
+          id: toolCall.id,
+          name: toolCall.function.name,
+          args,
+          result: toolResponse,
+          timestamp: new Date().toISOString(),
+        });
 
-      functionResponseParts.push({
-        functionResponse: {
-          id: fc.id,
-          name: fnName,
-          response: toolResponse,
-        },
-      });
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(toolResponse),
+        });
+      }
     }
+  }
 
-    contents.push({
-      role: "user",
-      parts: functionResponseParts,
-    });
+  if (!finalReply) {
+    finalReply = "Actions evaluated and executed successfully.";
   }
 
   const suggestedFollowUps = [
@@ -975,28 +898,26 @@ export async function runBusinessAgentWithTools(params: {
     toolCalls,
     clientActions,
     suggestedFollowUps,
-    modelUsed: actualModelUsed,
+    modelUsed: modelToUse,
     groundingSources,
     searchQueries,
   };
 }
 
 /**
- * Safely validates and parses a structured JSON response from Gemini,
- * stripping optional markdown code fences and ensuring plain text is never blindly parsed.
+ * Safely parses structured JSON from Ollama responses, stripping markdown code fences.
  */
-function parseStructuredGeminiJson<T>(rawText: string | undefined, context: string): T {
+function parseStructuredJson<T>(rawText: string | undefined, context: string): T {
   if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
     const emptyErr = new Error(
-      `Invalid response received from Gemini (${context}): Model returned an empty response body.`
+      `Invalid response received from Ollama (${context}): Model returned an empty response body.`
     ) as Error & { status?: number; code?: string };
     emptyErr.status = 500;
-    emptyErr.code = "INVALID_GEMINI_RESPONSE";
+    emptyErr.code = "INVALID_OLLAMA_RESPONSE";
     throw emptyErr;
   }
 
   let cleaned = rawText.trim();
-  // Strip optional markdown code fences (e.g. ```json ... ```) if present
   if (cleaned.startsWith("```")) {
     cleaned = cleaned
       .replace(/^```(?:json)?\s*/i, "")
@@ -1004,30 +925,37 @@ function parseStructuredGeminiJson<T>(rawText: string | undefined, context: stri
       .trim();
   }
 
-  // Ensure the response looks like a JSON object or array before calling JSON.parse
-  if (!cleaned.startsWith("{") && !cleaned.startsWith("[")) {
-    const nonJsonErr = new Error(
-      `Invalid response received from Gemini (${context}): Expected structured JSON output, but received plain text.`
-    ) as Error & { status?: number; code?: string };
-    nonJsonErr.status = 500;
-    nonJsonErr.code = "INVALID_GEMINI_RESPONSE";
-    throw nonJsonErr;
+  // Locate the outermost JSON block if the model included conversational filler
+  const firstCurly = cleaned.indexOf("{");
+  const firstSquare = cleaned.indexOf("[");
+  if (firstCurly !== -1 || firstSquare !== -1) {
+    const startIndex =
+      firstCurly !== -1 && (firstSquare === -1 || firstCurly < firstSquare)
+        ? firstCurly
+        : firstSquare;
+    const lastIndex =
+      startIndex === firstCurly
+        ? cleaned.lastIndexOf("}")
+        : cleaned.lastIndexOf("]");
+    if (lastIndex > startIndex) {
+      cleaned = cleaned.substring(startIndex, lastIndex + 1);
+    }
   }
 
   try {
     return JSON.parse(cleaned) as T;
   } catch (parseErr: any) {
     const malformedErr = new Error(
-      `Invalid response received from Gemini (${context}): Failed to parse JSON output (${parseErr?.message || "SyntaxError"}).`
+      `Invalid response received from Ollama (${context}): Failed to parse JSON output (${parseErr?.message || "SyntaxError"}).`
     ) as Error & { status?: number; code?: string };
     malformedErr.status = 500;
-    malformedErr.code = "INVALID_GEMINI_RESPONSE";
+    malformedErr.code = "INVALID_OLLAMA_RESPONSE";
     throw malformedErr;
   }
 }
 
 /**
- * Structured JSON extraction of contractual obligations from raw contract text using Gemini responseSchema.
+ * Structured JSON extraction of contractual obligations from raw contract text using Ollama.
  */
 export async function extractObligationsFromText(params: {
   contractName: string;
@@ -1047,107 +975,54 @@ export async function extractObligationsFromText(params: {
     cadence: string;
   }>;
 }> {
-  const prompt = `Extract all actionable business and legal obligations from the following contract text.
-Contract Name: ${params.contractName}
+  const client = getOllamaClient();
+  const model = resolveOllamaModel();
+
+  const systemInstruction = `You are a legal-operations contract extraction engine for Busitech Contract2Action AI.
+Extract concrete, actionable obligations from the provided contract text.
+You MUST output valid, parseable JSON conforming exactly to this structure:
+{
+  "summary": "Executive summary of contract obligations and exposure",
+  "overallRiskScore": 0-100,
+  "extractedObligations": [
+    {
+      "title": "Concise obligation title",
+      "clauseRef": "e.g. Clause §9.4 or Section 14.2",
+      "description": "What must be executed",
+      "ownerName": "Recommended owner role or person (e.g. 'Legal Operations', 'Cloud Infrastructure')",
+      "dueDate": "YYYY-MM-DD",
+      "risk": "High" | "Medium" | "Low",
+      "category": "Payment" | "Delivery" | "Inspection" | "Compliance" | "Reporting" | "SLA",
+      "cadence": "Annual" | "Quarterly" | "One-time" | "Trigger-based"
+    }
+  ]
+}`;
+
+  const completion = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: systemInstruction },
+      {
+        role: "user",
+        content: `Contract Name: ${params.contractName}
 Counterparty: ${params.counterparty || "Counterparty"}
 
 Contract Text:
 """
 ${params.contractText}
-"""`;
-
-  const { response } = await generateContentWithFallback({
-    model: GEMINI_FLASH_MODEL,
-    contents: prompt,
-    config: {
-      systemInstruction:
-        "You are a senior legal-ops contract extraction engine for Busitech Contract2Action AI. Extract concrete, actionable obligations with accurate clause references, owners, due dates (YYYY-MM-DD), risk levels ('High', 'Medium', 'Low'), and categories ('Payment', 'Delivery', 'Inspection', 'Compliance', 'Reporting', 'SLA').",
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          summary: {
-            type: Type.STRING,
-            description:
-              "Executive summary of the contract clauses and key operational risks.",
-          },
-          overallRiskScore: {
-            type: Type.INTEGER,
-            description: "Overall contract risk score from 0 to 100.",
-          },
-          extractedObligations: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: {
-                  type: Type.STRING,
-                  description: "Concise obligation title.",
-                },
-                clauseRef: {
-                  type: Type.STRING,
-                  description: "Clause or section number (e.g. 'Clause §9.4').",
-                },
-                description: {
-                  type: Type.STRING,
-                  description: "Actionable description of what needs to be done.",
-                },
-                ownerName: {
-                  type: Type.STRING,
-                  description:
-                    "Recommended owner role or person (e.g. 'Legal Operations', 'Cloud Infrastructure', 'Security Officer').",
-                },
-                dueDate: {
-                  type: Type.STRING,
-                  description: "Target deadline in YYYY-MM-DD format.",
-                },
-                risk: {
-                  type: Type.STRING,
-                  description: "Must be 'High', 'Medium', or 'Low'.",
-                },
-                category: {
-                  type: Type.STRING,
-                  description:
-                    "Must be one of: 'Payment', 'Delivery', 'Inspection', 'Compliance', 'Reporting', 'SLA'.",
-                },
-                cadence: {
-                  type: Type.STRING,
-                  description:
-                    "Cadence such as 'Annual', 'Quarterly', 'One-time', or 'Trigger-based'.",
-                },
-              },
-              required: [
-                "title",
-                "clauseRef",
-                "description",
-                "ownerName",
-                "dueDate",
-                "risk",
-                "category",
-                "cadence",
-              ],
-            },
-          },
-        },
-        required: ["summary", "overallRiskScore", "extractedObligations"],
+"""`,
       },
-    },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.1,
   });
 
-  if (!response || !Array.isArray(response.candidates) || response.candidates.length === 0) {
-    const noCandidateErr = new Error(
-      "Invalid response received from Gemini (Contract Extraction): No candidates returned."
-    ) as Error & { status?: number; code?: string };
-    noCandidateErr.status = 500;
-    noCandidateErr.code = "INVALID_GEMINI_RESPONSE";
-    throw noCandidateErr;
-  }
-
-  const parsed = parseStructuredGeminiJson<{
+  const rawText = completion.choices[0]?.message?.content || "";
+  const parsed = parseStructuredJson<{
     summary?: unknown;
     overallRiskScore?: unknown;
     extractedObligations?: unknown;
-  }>(response.text, "Contract Obligation Extraction");
+  }>(rawText, "Contract Obligation Extraction");
 
   if (
     typeof parsed !== "object" ||
@@ -1156,10 +1031,10 @@ ${params.contractText}
     !Array.isArray(parsed.extractedObligations)
   ) {
     const schemaErr = new Error(
-      "Invalid response received from Gemini (Contract Obligation Extraction): Response JSON did not match the required extraction schema."
+      "Invalid response received from Ollama (Contract Obligation Extraction): Response JSON did not match the required extraction schema."
     ) as Error & { status?: number; code?: string };
     schemaErr.status = 500;
-    schemaErr.code = "INVALID_GEMINI_RESPONSE";
+    schemaErr.code = "INVALID_OLLAMA_RESPONSE";
     throw schemaErr;
   }
 
@@ -1190,8 +1065,7 @@ export interface BusinessInsightItem {
 }
 
 /**
- * Generates executive business insights across the Busitech contract & obligation portfolio
- * using Gemini structured JSON schema output.
+ * Generates executive business insights across the Busitech contract & obligation portfolio using Ollama.
  */
 export async function generateBusinessInsights(params?: {
   focusArea?: string;
@@ -1204,6 +1078,9 @@ export async function generateBusinessInsights(params?: {
   priorityActions: string[];
   modelUsed: string;
 }> {
+  const client = getOllamaClient();
+  const model = resolveOllamaModel();
+
   const contracts = params?.snapshot?.contracts?.length
     ? params.snapshot.contracts
     : MOCK_CONTRACTS;
@@ -1249,72 +1126,48 @@ export async function generateBusinessInsights(params?: {
       })),
   };
 
-  const { response, modelUsed } = await generateContentWithFallback({
-    model: GEMINI_FLASH_MODEL,
-    contents: `Generate executive business insights and strategic recommendations for our Busitech contract governance portfolio.
+  const systemInstruction = `You are the Chief Legal & Business Intelligence Strategist for Busitech Contract2Action AI.
+Produce concise, data-backed executive insights, a portfolio health score (0-100), and concrete priority actions.
+You MUST output valid, parseable JSON conforming exactly to this structure:
+{
+  "summary": "Executive overview of portfolio health and key exposures",
+  "portfolioHealthScore": 0-100,
+  "insights": [
+    {
+      "title": "Insight title",
+      "category": "Category name",
+      "impact": "High" | "Medium" | "Low",
+      "recommendation": "Strategic recommendation"
+    }
+  ],
+  "priorityActions": [
+    "Concrete action item 1",
+    "Concrete action item 2"
+  ]
+}`;
+
+  const completion = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: systemInstruction },
+      {
+        role: "user",
+        content: `Generate executive business insights and strategic recommendations for our Busitech contract governance portfolio.
 Focus Area: ${focusArea}
 Portfolio Data: ${JSON.stringify(portfolioContext)}`,
-    config: {
-      systemInstruction:
-        "You are the Chief Legal & Business Intelligence Strategist for Busitech Contract2Action AI. Produce concise, data-backed executive insights, a portfolio health score (0-100), and concrete priority actions.",
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          summary: {
-            type: Type.STRING,
-            description: "Executive overview of portfolio health and key exposures.",
-          },
-          portfolioHealthScore: {
-            type: Type.INTEGER,
-            description: "Overall portfolio health score from 0 to 100.",
-          },
-          insights: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                category: { type: Type.STRING },
-                impact: {
-                  type: Type.STRING,
-                  description: "Must be 'High', 'Medium', or 'Low'.",
-                },
-                recommendation: { type: Type.STRING },
-              },
-              required: ["title", "category", "impact", "recommendation"],
-            },
-          },
-          priorityActions: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          },
-        },
-        required: [
-          "summary",
-          "portfolioHealthScore",
-          "insights",
-          "priorityActions",
-        ],
       },
-    },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.2,
   });
 
-  if (!response || !Array.isArray(response.candidates) || response.candidates.length === 0) {
-    const noCandidateErr = new Error(
-      "Invalid response received from Gemini (Business Insights): No candidates returned."
-    ) as Error & { status?: number; code?: string };
-    noCandidateErr.status = 500;
-    noCandidateErr.code = "INVALID_GEMINI_RESPONSE";
-    throw noCandidateErr;
-  }
-
-  const parsed = parseStructuredGeminiJson<{
+  const rawText = completion.choices[0]?.message?.content || "";
+  const parsed = parseStructuredJson<{
     summary?: unknown;
     portfolioHealthScore?: unknown;
     insights?: unknown;
     priorityActions?: unknown;
-  }>(response.text, "Business Insights");
+  }>(rawText, "Business Insights");
 
   return {
     summary:
@@ -1331,6 +1184,6 @@ Portfolio Data: ${JSON.stringify(portfolioContext)}`,
     priorityActions: Array.isArray(parsed.priorityActions)
       ? (parsed.priorityActions as string[])
       : [],
-    modelUsed,
+    modelUsed: model,
   };
 }

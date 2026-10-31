@@ -117,7 +117,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 shrink-0" />
-              <span>AI Command Bar (DeepSeek)</span>
+              <span>AI Command Bar (Ollama Cloud)</span>
             </button>
             <button
               type="button"

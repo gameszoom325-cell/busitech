@@ -24,11 +24,18 @@ export interface ClientSideAction {
   payload: Record<string, unknown>;
 }
 
-export type GeminiModelTier =
+export type OllamaModelTier =
+  | "gemma4:31b-cloud"
+  | "gemma4:27b"
+  | "llama3.3:70b"
+  | "mistral-large:latest"
   | "deepseek-ai/deepseek-v4.1-flash"
   | "gemini-4-argon"
   | "gemini-3.8-flash"
   | "gemini-3.1-flash-lite";
+
+// Backwards-compatible type alias
+export type GeminiModelTier = OllamaModelTier;
 
 export type AgentRolePersona = "ops_lead" | "legal_counsel" | "risk_analyst";
 
@@ -38,8 +45,9 @@ export interface GroundingSource {
 }
 
 export interface AgentTurnMessage {
-  role: "user" | "model";
-  text: string;
+  role: "user" | "model" | "assistant";
+  text?: string;
+  content?: string;
 }
 
 export interface GeminiAgentResponse {
@@ -51,14 +59,17 @@ export interface GeminiAgentResponse {
   groundingSources?: GroundingSource[];
   searchQueries?: string[];
 }
+export type OllamaAgentResponse = GeminiAgentResponse;
 
 export interface GeminiStatusResponse {
   connected: boolean;
+  provider?: string;
   model: string;
   availableModels?: string[];
   toolsCount: number;
   tools: Array<{ name: string; description: string }>;
 }
+export type OllamaStatusResponse = GeminiStatusResponse;
 
 export interface ExtractedClauseObligation {
   title: string;
@@ -76,6 +87,7 @@ export interface GeminiExtractionResponse {
   overallRiskScore: number;
   extractedObligations: ExtractedClauseObligation[];
 }
+export type OllamaExtractionResponse = GeminiExtractionResponse;
 
 export interface ActionExecutionCallbacks {
   onNavigate?: (route: string) => void;
@@ -88,7 +100,7 @@ export interface ActionExecutionCallbacks {
 }
 
 /**
- * Applies client-side mutations triggered by server-side Gemini tool calls
+ * Applies client-side mutations triggered by server-side Ollama tool calls
  * so the local UI state stays immediately synchronized.
  */
 export function applyClientSideActions(
@@ -200,6 +212,7 @@ export interface GeminiInsightsResponse {
   priorityActions: string[];
   modelUsed?: string;
 }
+export type OllamaInsightsResponse = GeminiInsightsResponse;
 
 /**
  * Safely reads and validates an HTTP response from the backend AI endpoints.
@@ -219,7 +232,7 @@ async function parseApiJsonResponse<T>(
     );
   }
 
-  // Detect HTML error/warmup pages (e.g. from reverse proxies) before attempting JSON.parse
+  // Detect HTML error/warmup pages before attempting JSON.parse
   const lowerPrefix = trimmed.slice(0, 60).toLowerCase();
   if (lowerPrefix.startsWith("<!doctype") || lowerPrefix.startsWith("<html")) {
     throw new Error(
@@ -233,7 +246,6 @@ async function parseApiJsonResponse<T>(
     trimmed.startsWith("[");
 
   if (!looksLikeJson) {
-    // Plain text response — do not pass to JSON.parse()
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`AI service endpoint was not found (HTTP 404).`);
@@ -275,11 +287,11 @@ async function parseApiJsonResponse<T>(
 
 export const geminiService = {
   /**
-   * Checks server-side Gemini connection status and registered tools via GET /api/ai/status.
+   * Checks server-side Ollama connection status and registered tools via GET /api/ai/status.
    */
   async getStatus(): Promise<GeminiStatusResponse> {
     const res = await fetch("/api/ai/status");
-    return parseApiJsonResponse<GeminiStatusResponse>(res, "Gemini Status");
+    return parseApiJsonResponse<GeminiStatusResponse>(res, "AI Status");
   },
 
   /**
@@ -290,7 +302,7 @@ export const geminiService = {
     callbacks?: ActionExecutionCallbacks
   ): Promise<GeminiAgentResponse> {
     if (!prompt || !prompt.trim()) {
-      throw new Error("Please enter a command before submitting to Gemini.");
+      throw new Error("Please enter a command before submitting to Ollama Cloud.");
     }
 
     const res = await fetch("/api/ai/chat", {
@@ -324,7 +336,7 @@ export const geminiService = {
 
   /**
    * Sends a multi-turn message to the Busitech AI Business Agent via POST /api/ai/chat
-   * with tool-calling, selectable Gemini model tier, role persona, and live Google Search Grounding.
+   * with tool-calling, selectable Ollama model, and role persona.
    */
   async sendAgentMessage(
     prompt: string,
@@ -347,7 +359,7 @@ export const geminiService = {
         prompt: prompt.trim(),
         history,
         mode: "agent",
-        model: options?.model,
+        model: options?.model || "gemma4:31b-cloud",
         rolePersona: options?.rolePersona,
         useSearchGrounding: Boolean(options?.useSearchGrounding),
         snapshot: {
@@ -431,3 +443,7 @@ export const geminiService = {
     );
   },
 };
+
+// Aliases for modern naming
+export const ollamaService = geminiService;
+export const aiService = geminiService;

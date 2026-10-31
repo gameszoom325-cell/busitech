@@ -1,9 +1,12 @@
-import OpenAI from "openai";
 import {
-  getNvidiaClient,
-  NVIDIA_MODEL,
-  formatNvidiaError,
-} from "../../server/nvidiaClient.ts";
+  getOllamaClient,
+  resolveOllamaModel,
+  formatOllamaError,
+} from "../../server/ollamaClient.ts";
+import {
+  runBusinessAgentWithTools,
+  AgentRolePersona,
+} from "../../server/businessTools.ts";
 
 export default async function handler(req: any, res: any) {
   // CORS support
@@ -32,18 +35,34 @@ export default async function handler(req: any, res: any) {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-    // Read the key inside the request handler (not at module load), and trim it
-    const apiKey = (process.env.NVIDIA_API_KEY || "").trim();
-    if (!apiKey) {
-      res.status(401).json({
-        error:
-          "NVIDIA API key is not configured. Please add NVIDIA_API_KEY in Vercel Project Settings > Environment Variables.",
-        code: "MISSING_API_KEY",
+    const {
+      prompt,
+      message,
+      messages: inputMessages,
+      history,
+      mode,
+      model,
+      rolePersona,
+      snapshot,
+    } = body;
+
+    const userPrompt = String(message || prompt || "").trim();
+
+    if (mode === "agent" || mode === "command") {
+      const result = await runBusinessAgentWithTools({
+        prompt: userPrompt || "Assist with enterprise contracts and workflows.",
+        history: Array.isArray(history) ? history : [],
+        snapshot,
+        mode,
+        model: typeof model === "string" ? model : undefined,
+        rolePersona: rolePersona as AgentRolePersona | undefined,
       });
+      res.status(200).json(result);
       return;
     }
 
-    const client = getNvidiaClient(apiKey);
+    const client = getOllamaClient();
+    const modelToUse = resolveOllamaModel(model);
 
     const systemPrompt = `You are the AI Business Assistant for Contract2Action AI (Busitech).
 You help enterprise users track contracts, audit legal obligations, monitor upcoming compliance deadlines, and triage human-in-the-loop approval workflows.
@@ -54,15 +73,15 @@ Keep answers concise, direct, professional, and actionable.`;
       { role: "system", content: systemPrompt },
     ];
 
-    if (Array.isArray(body.messages) && body.messages.length > 0) {
-      for (const m of body.messages) {
+    if (Array.isArray(inputMessages) && inputMessages.length > 0) {
+      for (const m of inputMessages) {
         messages.push({
           role: m.role === "assistant" ? "assistant" : "user",
           content: String(m.content || m.text || ""),
         });
       }
-    } else if (Array.isArray(body.history) && body.history.length > 0) {
-      for (const h of body.history) {
+    } else if (Array.isArray(history) && history.length > 0) {
+      for (const h of history) {
         messages.push({
           role:
             h.role === "model" || h.role === "assistant"
@@ -73,7 +92,6 @@ Keep answers concise, direct, professional, and actionable.`;
       }
     }
 
-    const userPrompt = String(body.message || body.prompt || "").trim();
     if (userPrompt) {
       messages.push({ role: "user", content: userPrompt });
     }
@@ -86,7 +104,6 @@ Keep answers concise, direct, professional, and actionable.`;
       return;
     }
 
-    // Client-side UI command detection for Command Bar navigation
     const clientActions: Array<{ type: string; payload: Record<string, unknown> }> = [];
     const lowerPrompt = userPrompt.toLowerCase();
     if (
@@ -124,10 +141,6 @@ Keep answers concise, direct, professional, and actionable.`;
       clientActions.push({ type: "SET_THEME", payload: { theme: "light" } });
     }
 
-    // Route all model selections (including fallback option) to the working NVIDIA DeepSeek model
-    const requestedModel = String(body.model || "").trim();
-    const modelToUse = NVIDIA_MODEL;
-
     const completion = await client.chat.completions.create({
       model: modelToUse,
       messages,
@@ -151,12 +164,12 @@ Keep answers concise, direct, professional, and actionable.`;
         "Review pending human-gate approvals",
       ],
       modelUsed: modelToUse,
-      requestedModel: requestedModel || modelToUse,
+      requestedModel: modelToUse,
     });
   } catch (err: unknown) {
-    const formatted = formatNvidiaError(
+    const formatted = formatOllamaError(
       err,
-      "Failed to process request with NVIDIA DeepSeek API."
+      "Failed to process request with Ollama Cloud API."
     );
     console.warn(`[/api/ai/chat] ${formatted.code}: ${formatted.message}`);
     res.status(formatted.status).json({

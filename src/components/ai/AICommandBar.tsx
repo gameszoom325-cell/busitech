@@ -2,69 +2,65 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Sparkles,
-  Send,
+  ArrowRight,
   Loader2,
+  AlertCircle,
   Wrench,
   CheckCircle2,
-  AlertCircle,
   ChevronDown,
   ChevronUp,
   ArrowUpRight,
-  Terminal,
 } from "lucide-react";
 import {
   geminiService,
   GeminiAgentResponse,
   ToolExecutionRecord,
 } from "../../services/geminiService";
-import { useTheme } from "../../context/ThemeContext";
 import { useToast } from "../../context/ToastContext";
+import { useTheme } from "../../context/ThemeContext";
 
 interface AICommandBarProps {
-  initialQuery?: string;
   onClosePalette?: () => void;
-  compact?: boolean;
+  placeholder?: string;
+  autoFocus?: boolean;
 }
 
-const QUICK_AI_COMMANDS = [
-  "Analyze overall business risk exposure",
-  "List all high-risk and overdue obligations",
-  "Show pending human-gate approvals",
-  "Create a High risk SLA obligation for AWS Cloud due 2025-11-20",
-  "Draft a Non-Renewal Notice for Salesforce Section 14.2",
+const SUGGESTED_PROMPTS = [
+  "Go to obligations",
+  "List all high risk obligations",
+  "Show pending approvals",
+  "Switch to dark mode",
+  "Draft a non-renewal notice for Salesforce",
 ];
 
 export const AICommandBar: React.FC<AICommandBarProps> = ({
-  initialQuery = "",
   onClosePalette,
-  compact = false,
+  placeholder = "Ask AI to navigate, triage risk, or draft notices...",
+  autoFocus = false,
 }) => {
-  const [prompt, setPrompt] = useState(initialQuery);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GeminiAgentResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null);
 
   const navigate = useNavigate();
-  const { setTheme } = useTheme();
   const { showToast } = useToast();
+  const { setTheme } = useTheme();
 
-  const handleRunCommand = async (commandText?: string) => {
-    const queryToRun = (commandText ?? prompt).trim();
-    if (!queryToRun || isLoading) return;
+  const handleExecute = async (overrideQuery?: string) => {
+    const queryToRun = (overrideQuery ?? query).trim();
+    if (!queryToRun || loading) return;
 
-    if (commandText) {
-      setPrompt(commandText);
-    }
-
-    setIsLoading(true);
+    setLoading(true);
     setError(null);
+    setResult(null);
 
     try {
       const response = await geminiService.executeCommand(queryToRun, {
         onNavigate: (route) => {
-          navigate(route);
           onClosePalette?.();
+          navigate(route);
         },
         onSetTheme: (theme) => {
           setTheme(theme);
@@ -80,12 +76,14 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
 
       if (
         msg.includes("MISSING_API_KEY") ||
+        msg.includes("OLLAMA_API_KEY") ||
+        msg.includes("Missing Ollama API Key") ||
         msg.includes("Missing NVIDIA API Key") ||
         msg.includes("NVIDIA_API_KEY") ||
         msg.includes("Missing Gemini API Key")
       ) {
         friendly =
-          "NVIDIA API key is not configured. Please add NVIDIA_API_KEY in Vercel Project Settings.";
+          "Ollama Cloud API key is not configured. Please add OLLAMA_API_KEY in your .env file.";
       } else if (msg.includes("404") || msg.includes("NOT_FOUND")) {
         friendly =
           "AI service endpoint is temporarily unavailable. Please retry in a moment.";
@@ -99,10 +97,11 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
           "AI request rate limit reached. Please wait a moment before trying again.";
       } else if (
         msg.includes("Failed to fetch") ||
-        msg.includes("NetworkError")
+        msg.includes("NetworkError") ||
+        msg.includes("ECONNREFUSED")
       ) {
         friendly =
-          "Network connection failed. Please check your internet connection.";
+          "Network connection failed. Please check your network and Ollama Cloud endpoint.";
       } else if (
         err?.message &&
         !err.message.includes("<!doctype") &&
@@ -114,69 +113,69 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
 
       setError(friendly);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
       e.preventDefault();
-      handleRunCommand();
+      handleExecute();
     }
   };
 
   return (
-    <div className="space-y-3">
-      {/* Command Input Box */}
-      <div className="rounded-xl border border-[var(--color-primary-border)] bg-[var(--color-bg-card-subtle)] p-2.5 shadow-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[var(--color-primary-light)] text-[var(--color-primary)] flex items-center justify-center shrink-0">
-            <Sparkles className="w-4 h-4 shrink-0" />
-          </div>
+    <div className="w-full space-y-3">
+      {/* Search Input Bar */}
+      <div className="relative">
+        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-xs focus-within:ring-2 focus-within:ring-[var(--color-primary)] focus-within:border-transparent transition-all">
+          <Sparkles className="w-4 h-4 text-[var(--color-primary)] shrink-0 animate-pulse" />
           <input
             type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask Busitech AI to search contracts, create obligations, approve items, or analyze risk..."
-            className="flex-1 bg-transparent text-xs sm:text-sm text-[var(--color-text-main)] placeholder-[var(--color-text-subtle)] focus:outline-hidden min-w-0"
-            disabled={isLoading}
+            placeholder={placeholder}
+            autoFocus={autoFocus}
+            disabled={loading}
+            className="flex-1 bg-transparent text-sm text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:outline-hidden min-w-0"
           />
-          <button
-            onClick={() => handleRunCommand()}
-            disabled={isLoading || !prompt.trim()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors shrink-0 cursor-pointer"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                <span>Running...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-3.5 h-3.5 shrink-0" />
-                <span>Run AI</span>
-              </>
-            )}
-          </button>
+
+          {loading ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--color-bg-hover)] text-xs text-[var(--color-text-muted)]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-primary)]" />
+              <span className="hidden sm:inline">Executing...</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleExecute()}
+              disabled={!query.trim()}
+              className="px-3 py-1 rounded-lg bg-[var(--color-primary)] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity flex items-center gap-1 shrink-0 cursor-pointer"
+            >
+              <span>Run</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
         </div>
 
-        {/* Quick Command Suggestions */}
-        {!compact && (
-          <div className="mt-2.5 pt-2 border-t border-[var(--color-border-subtle)] flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--color-text-subtle)] flex items-center gap-1 mr-1">
-              <Terminal className="w-3 h-3" />
+        {/* Suggested Quick Prompts */}
+        {!result && !error && (
+          <div className="mt-2 flex flex-wrap gap-1.5 px-1">
+            <span className="text-[11px] text-[var(--color-text-subtle)] mr-1 self-center">
               Try:
             </span>
-            {QUICK_AI_COMMANDS.map((cmd) => (
+            {SUGGESTED_PROMPTS.map((p) => (
               <button
-                key={cmd}
+                key={p}
                 type="button"
-                onClick={() => handleRunCommand(cmd)}
-                disabled={isLoading}
-                className="text-[11px] px-2 py-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-card)] text-[var(--color-text-muted)] hover:text-[var(--color-primary-text)] hover:border-[var(--color-primary-border)] transition-colors truncate max-w-[260px] cursor-pointer"
+                onClick={() => {
+                  setQuery(p);
+                  handleExecute(p);
+                }}
+                className="text-[11px] px-2 py-0.5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-card)] text-[var(--color-text-muted)] hover:text-[var(--color-text-main)] hover:border-[var(--color-border)] transition-colors cursor-pointer"
               >
-                {cmd}
+                {p}
               </button>
             ))}
           </div>
@@ -188,7 +187,7 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
         <div className="p-3 rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] text-xs flex items-start gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="space-y-1 flex-1 min-w-0">
-            <div className="font-bold">DeepSeek Command Error</div>
+            <div className="font-bold">AI Command Error</div>
             <div className="break-words">{error}</div>
           </div>
         </div>
@@ -268,7 +267,7 @@ export const AICommandBar: React.FC<AICommandBarProps> = ({
           {/* Footer link to open full AI Business Agent */}
           <div className="pt-2 border-t border-[var(--color-border-subtle)] flex items-center justify-between gap-2">
             <span className="text-[10px] font-mono text-[var(--color-text-subtle)]">
-              Model: deepseek-ai/deepseek-v4.1-flash • NVIDIA NIM
+              Model: {result.modelUsed || "gemma4:31b-cloud"} • Ollama Cloud
             </span>
             <button
               type="button"

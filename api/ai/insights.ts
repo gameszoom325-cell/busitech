@@ -1,5 +1,5 @@
 import { generateBusinessInsights } from "../../server/businessTools.ts";
-import { formatGeminiError } from "../../server/geminiClient.ts";
+import { formatOllamaError } from "../../server/ollamaClient.ts";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -19,18 +19,18 @@ export default async function handler(req: any, res: any) {
   try {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
-    const { focusArea, snapshot } = body;
+    const { focusArea, prompt, snapshot } = body;
 
     const result = await generateBusinessInsights({
-      focusArea: focusArea || "overall portfolio governance",
+      focusArea: focusArea || prompt || "overall portfolio governance",
       snapshot,
     });
 
     res.status(200).json(result);
   } catch (err: unknown) {
-    const formatted = formatGeminiError(
+    const formatted = formatOllamaError(
       err,
-      "Failed to generate business insights with Gemini API."
+      "Failed to generate business insights with Ollama Cloud API."
     );
     res.status(formatted.status).json({
       error: formatted.message,
