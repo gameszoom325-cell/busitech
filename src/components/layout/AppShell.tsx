@@ -88,7 +88,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const navItems = [
     { name: 'Overview', path: '/overview', icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
-    { name: 'AI Business Agent', path: '/agent', icon: <Bot className="w-4 h-4 shrink-0 text-[var(--color-primary)]" /> },
     { name: 'Contracts', path: '/contracts', icon: <FileText className="w-4 h-4 shrink-0" /> },
     { name: 'Obligations', path: '/obligations', icon: <CheckSquare className="w-4 h-4 shrink-0" /> },
     { name: 'Approvals', path: '/approvals', icon: <ShieldAlert className="w-4 h-4 shrink-0" /> },
@@ -188,20 +187,12 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         {/* Right: Global Search + AI Command Bar + PWA Install + Notifications + Upload + Theme + User */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Global Search Bar for Contracts, Obligations, and Activity Logs */}
-          <GlobalSearch onOpenCommandPalette={() => setIsCommandOpen(true)} />
+          <GlobalSearch />
 
           {/* PWA Install Button */}
           <PWAInstallButton />
 
           {/* AI Command Bar Trigger */}
-          <button
-            onClick={() => setIsCommandOpen(true)}
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-[var(--color-primary-border)] bg-[var(--color-primary-light)]/50 text-[var(--color-primary-text)] hover:border-[var(--color-primary)] transition-colors shrink-0 cursor-pointer min-h-[36px]"
-            title="Open AI Command Bar (⌘K)"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)] shrink-0" />
-            <span className="font-semibold whitespace-nowrap">AI Command</span>
-          </button>
 
           {/* Notifications Dropdown */}
           <div className="relative shrink-0">

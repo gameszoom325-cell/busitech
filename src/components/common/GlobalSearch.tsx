@@ -391,26 +391,6 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
             )}
           </div>
 
-          {/* Footer: Launch AI Command Bar */}
-          {onOpenCommandPalette && (
-            <div className="px-3.5 py-2 border-t border-[var(--color-border)] bg-[var(--color-bg-card-subtle)] flex items-center justify-between text-[11px]">
-              <span className="text-[var(--color-text-muted)] truncate">
-                Need AI analysis or tool execution?
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  onOpenCommandPalette();
-                }}
-                className="inline-flex items-center gap-1 font-semibold text-[var(--color-primary-text)] hover:underline shrink-0 cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Open AI Command Bar</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

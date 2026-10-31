@@ -18,7 +18,6 @@ import { ObligationsBarChart } from '../components/charts/ObligationsBarChart';
 import { RiskDonutChart } from '../components/charts/RiskDonutChart';
 import { ContractOverviewWidget } from '../components/charts/ContractOverviewWidget';
 import { ObligationsTrendLineChart } from '../components/charts/ObligationsTrendLineChart';
-import { AICommandBar } from '../components/ai/AICommandBar';
 import { SmartExportButton } from '../components/modals/SmartExportModal';
 import { exportContractsListToCSV } from '../services/smartExport';
 
@@ -83,13 +82,6 @@ export const OverviewPage: React.FC = () => {
             <span className="whitespace-nowrap">Filter View</span>
           </button>
 
-          <button
-            onClick={() => navigate('/agent')}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border border-[var(--color-primary-border)] bg-[var(--color-primary-light)] text-[var(--color-primary-text)] hover:bg-[var(--color-primary)] hover:text-white transition-colors min-h-[40px] sm:min-h-[36px] cursor-pointer"
-          >
-            <Bot className="w-3.5 h-3.5 shrink-0" />
-            <span className="whitespace-nowrap">AI Business Agent</span>
-          </button>
 
           <button
             onClick={() => navigate('/upload')}
@@ -99,30 +91,6 @@ export const OverviewPage: React.FC = () => {
             <span className="whitespace-nowrap">Upload Contract</span>
           </button>
         </div>
-      </div>
-
-      {/* BUSITECH AI COMMAND BAR (GEMINI + TOOL CALLING) */}
-      <div className="p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] shadow-[var(--shadow-card)] space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
-            <span className="text-xs font-bold text-[var(--color-text-main)]">
-              Busitech AI Command Bar
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary-text)] border border-[var(--color-primary-border)] font-semibold">
-              gemma4:31b-cloud • Ollama Cloud
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/agent')}
-            className="text-xs font-semibold text-[var(--color-primary-text)] hover:underline flex items-center gap-1 cursor-pointer"
-          >
-            <span>Full Agent Studio</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <AICommandBar />
       </div>
 
       {/* 4 STAT CARDS IN A RESPONSIVE GRID: 2 columns on phone, 4 on desktop */}
@@ -489,14 +457,6 @@ export const OverviewPage: React.FC = () => {
             <p className="text-xs text-[var(--color-text-main)] leading-relaxed break-words">
               3 draft notifications were prepared from trigger conditions. Launch the AI Business Agent to inspect clauses, run risk audits, or resolve approvals via Ollama Cloud.
             </p>
-            <button
-              type="button"
-              onClick={() => navigate('/agent')}
-              className="w-full py-2 px-3 rounded-lg text-xs font-bold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Bot className="w-3.5 h-3.5" />
-              <span>Launch AI Business Agent</span>
-            </button>
           </div>
         </div>
       </div>
