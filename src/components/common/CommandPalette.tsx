@@ -182,7 +182,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
                           <span className="font-semibold truncate">{o.title}</span>
                           <span className="text-[var(--color-text-muted)] truncate">• Clause {o.clauseRef}</span>
                         </div>
-                        <span className="text-[10px] font-mono text-[var(--color-text-subtle)] shrink-0 ml-2">{o.deadline}</span>
+                        <span className="text-[10px] font-mono text-[var(--color-text-subtle)] shrink-0 ml-2">{o.dueDateFormatted.split('\n')[0] || o.dueDate}</span>
                       </button>
                     ))}
                   </div>

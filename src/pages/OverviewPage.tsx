@@ -6,10 +6,8 @@ import {
   Download,
   Clock,
   ArrowRight,
-  Sparkles,
   FileText,
   AlertCircle,
-  Bot
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -439,24 +437,6 @@ export const OverviewPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Agent Note */}
-          <div className="p-4 rounded-xl border border-[var(--color-primary-border)] bg-[var(--color-primary-light)] space-y-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
-                <span className="text-xs font-bold text-[var(--color-primary-text)]">
-                  Busitech AI Business Agent
-                </span>
-              </div>
-              <span className="text-[10px] font-mono font-bold text-[var(--color-primary-text)]">
-                8 Tools Active
-              </span>
-            </div>
-            <p className="text-xs text-[var(--color-text-main)] leading-relaxed break-words">
-              3 draft notifications were prepared from trigger conditions. Launch the AI Business Agent to inspect clauses, run risk audits, or resolve approvals via Ollama Cloud.
-            </p>
           </div>
         </div>
       </div>

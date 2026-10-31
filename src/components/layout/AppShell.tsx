@@ -21,9 +21,7 @@ import {
   Info,
   Copy,
   Check,
-  User as UserIcon,
-  Bot,
-  Sparkles
+  User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -191,8 +189,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
           {/* PWA Install Button */}
           <PWAInstallButton />
-
-          {/* AI Command Bar Trigger */}
 
           {/* Notifications Dropdown */}
           <div className="relative shrink-0">
