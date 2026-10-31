@@ -3,11 +3,11 @@
  * Implements:
  * 1. Network-First with Cache Fallback for /api/contracts/metadata so contract summaries
  *    remain accessible when backend connectivity is interrupted.
- * 2. Stale-While-Revalidate for static application assets and fonts.
+ * 2. Unregister & clear old caches automatically to ensure instant updates.
  */
 
-const STATIC_CACHE_NAME = "c2a-static-shell-v2";
-const CONTRACT_METADATA_CACHE = "c2a-contract-metadata-v2";
+const STATIC_CACHE_NAME = "c2a-static-shell-v4";
+const CONTRACT_METADATA_CACHE = "c2a-contract-metadata-v4";
 
 const PRECACHE_URLS = ["/", "/index.html", "/manifest.json", "/icon.svg"];
 
@@ -17,9 +17,7 @@ self.addEventListener("install", (event) => {
     caches
       .open(STATIC_CACHE_NAME)
       .then((cache) => cache.addAll(PRECACHE_URLS))
-      .catch(() => {
-        // Non-fatal if an asset is dynamically served by Vite
-      })
+      .catch(() => {})
   );
 });
 
@@ -46,7 +44,6 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // 1. Contract Metadata API: Network-First with Service Worker Cache Fallback
   if (url.pathname === "/api/contracts/metadata") {
     event.respondWith(
       (async () => {
@@ -86,46 +83,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Skip Vite internal module runner / HMR requests and other POST/API routes
-  if (
-    url.pathname.startsWith("/@") ||
-    url.pathname.startsWith("/node_modules/") ||
-    url.pathname.startsWith("/src/") ||
-    url.pathname.startsWith("/api/")
-  ) {
-    return;
-  }
-
-  // 2. Navigation & static assets: Network-First falling back to cached shell
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).catch(async () => {
-        const cache = await caches.open(STATIC_CACHE_NAME);
-        return (
-          (await cache.match("/index.html")) ||
-          (await cache.match("/")) ||
-          Response.error()
-        );
-      })
-    );
-  }
-});
-
-// Listen for explicit CONTRACT_CACHE_SYNC messages from the client app
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "CACHE_CONTRACT_METADATA") {
-    const payload = event.data.payload;
-    event.waitUntil(
-      caches.open(CONTRACT_METADATA_CACHE).then((cache) => {
-        const response = new Response(JSON.stringify(payload), {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "X-C2A-Cache": "CLIENT-SNAPSHOT",
-          },
-        });
-        return cache.put("/api/contracts/metadata", response);
-      })
-    );
-  }
+  // Network-First for everything else
+  event.respondWith(
+    fetch(request).catch(async () => {
+      const cache = await caches.open(STATIC_CACHE_NAME);
+      return (
+        (await cache.match(request)) ||
+        (await cache.match("/index.html")) ||
+        Response.error()
+      );
+    })
+  );
 });
