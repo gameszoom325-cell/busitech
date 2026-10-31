@@ -2,11 +2,11 @@ import {
   getOllamaClient,
   resolveOllamaModel,
   formatOllamaError,
-} from "../../server/ollamaClient.ts";
+} from "../../server/ollamaClient";
 import {
   runBusinessAgentWithTools,
   AgentRolePersona,
-} from "../../server/businessTools.ts";
+} from "../../server/businessTools";
 
 export default async function handler(req: any, res: any) {
   // CORS support

@@ -2,8 +2,8 @@ import {
   hasValidOllamaApiKey,
   resolveOllamaModel,
   ALLOWED_OLLAMA_MODELS,
-} from "../../server/ollamaClient.ts";
-import { BUSINESS_TOOLS } from "../../server/businessTools.ts";
+} from "../../server/ollamaClient";
+import { BUSINESS_TOOLS } from "../../server/businessTools";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Credentials", "true");

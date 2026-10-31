@@ -1,4 +1,4 @@
-import { Contract, Obligation, ApprovalItem, ActivityEvent, NotificationItem, User, GuestRegistration } from '../types/index.ts';
+import { Contract, Obligation, ApprovalItem, ActivityEvent, NotificationItem, User, GuestRegistration } from '../types';
 
 export const DEMO_NOTICE = "Demo data - Contract2Action AI Mock Layer";
 

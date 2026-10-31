@@ -10,7 +10,7 @@ import {
   extractObligationsFromText,
   generateBusinessInsights,
   AgentRolePersona,
-} from "./server/businessTools.ts";
+} from "./server/businessTools";
 import {
   resolveOllamaBaseUrl,
   resolveOllamaApiKey,
@@ -19,14 +19,14 @@ import {
   ALLOWED_OLLAMA_MODELS,
   getOllamaClient,
   formatOllamaError,
-} from "./server/ollamaClient.ts";
-import { buildContractMetadataPayload } from "./src/services/contractCache.ts";
-import { verifyAuth, optionalAuth, AuthenticatedRequest } from "./src/middleware/auth.ts";
+} from "./server/ollamaClient";
+import { buildContractMetadataPayload } from "./src/services/contractCache";
+import { verifyAuth, optionalAuth, AuthenticatedRequest } from "./src/middleware/auth";
 import {
   syncUser,
   getUserPreferencesFromDb,
   updateUserPreferencesInDb,
-} from "./src/db/users.ts";
+} from "./src/db/users";
 import {
   getContractsFromDb,
   upsertContractInDb,
@@ -36,7 +36,7 @@ import {
   updateApprovalStatusInDb,
   getActivityLogsFromDb,
   appendActivityLogInDb,
-} from "./src/db/repository.ts";
+} from "./src/db/repository";
 
 dotenv.config();
 

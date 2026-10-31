@@ -3,13 +3,13 @@ import {
   getOllamaClient,
   resolveOllamaModel,
   formatOllamaError,
-} from "./ollamaClient.ts";
+} from "./ollamaClient";
 import {
   MOCK_CONTRACTS,
   MOCK_OBLIGATIONS,
   MOCK_APPROVALS,
   MOCK_ACTIVITY_LOGS,
-} from "../src/data/mockData.ts";
+} from "../src/data/mockData";
 import {
   Contract,
   Obligation,
@@ -17,7 +17,7 @@ import {
   ObligationCategory,
   RiskLevel,
   ObligationStatus,
-} from "../src/types/index.ts";
+} from "../src/types/index";
 
 export interface ToolExecutionRecord {
   id: string;

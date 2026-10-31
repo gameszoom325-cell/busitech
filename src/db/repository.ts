@@ -1,19 +1,19 @@
 import { eq, desc } from "drizzle-orm";
-import { db } from "./index.ts";
+import { db } from "./index";
 import {
   contracts,
   obligations,
   approvals,
   activityLogs,
   users,
-} from "./schema.ts";
+} from "./schema";
 import {
   MOCK_CONTRACTS,
   MOCK_OBLIGATIONS,
   MOCK_APPROVALS,
   MOCK_ACTIVITY_LOGS,
   MOCK_USERS,
-} from "../data/mockData.ts";
+} from "../data/mockData";
 import {
   Contract,
   Obligation,
@@ -22,7 +22,7 @@ import {
   ObligationStatus,
   RiskLevel,
   ObligationCategory,
-} from "../types/index.ts";
+} from "../types/index";
 
 let isSeeded = false;
 let seedingPromise: Promise<void> | null = null;

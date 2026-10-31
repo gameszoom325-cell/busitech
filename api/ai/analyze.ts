@@ -1,5 +1,5 @@
-import { extractObligationsFromText, runBusinessAgentWithTools } from "../../server/businessTools.ts";
-import { formatOllamaError } from "../../server/ollamaClient.ts";
+import { extractObligationsFromText, runBusinessAgentWithTools } from "../../server/businessTools";
+import { formatOllamaError } from "../../server/ollamaClient";
 
 const MAX_INPUT_CHARS = 50000;
 

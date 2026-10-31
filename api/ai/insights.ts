@@ -1,5 +1,5 @@
-import { generateBusinessInsights } from "../../server/businessTools.ts";
-import { formatOllamaError } from "../../server/ollamaClient.ts";
+import { generateBusinessInsights } from "../../server/businessTools";
+import { formatOllamaError } from "../../server/ollamaClient";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Credentials", "true");

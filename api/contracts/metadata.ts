@@ -1,8 +1,8 @@
 import {
   MOCK_CONTRACTS,
   MOCK_OBLIGATIONS,
-} from "../../src/data/mockData.ts";
-import { buildContractMetadataPayload } from "../../src/services/contractCache.ts";
+} from "../../src/data/mockData";
+import { buildContractMetadataPayload } from "../../src/services/contractCache";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Credentials", "true");

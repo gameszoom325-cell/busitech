@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
-import { db } from "./index.ts";
-import { users } from "./schema.ts";
-import { isAdminEmail } from "../config/admins.ts";
+import { db } from "./index";
+import { users } from "./schema";
+import { isAdminEmail } from "../config/admins";
 
 export interface UserPreferencesPayload {
   emailAlertsEnabled?: boolean;
